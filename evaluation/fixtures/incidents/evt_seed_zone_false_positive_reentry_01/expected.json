@@ -1,0 +1,6 @@
+{
+  "expected_state": "confirmed",
+  "expected_classification": "false_positive",
+  "check_classification": true,
+  "notes": "track exits and re-enters the zone -- claimed continuous dwell is false"
+}

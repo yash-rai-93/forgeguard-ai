@@ -1,0 +1,6 @@
+{
+  "expected_state": "confirmed",
+  "expected_classification": "false_positive",
+  "check_classification": true,
+  "notes": "track is in the zone for only the first captured frame, then leaves for good"
+}
