@@ -1,558 +1,244 @@
-# SiteWatch AI — Master Explainer
+# SiteWatch AI (sitework-ai)
 
-Repo: <https://github.com/PCSchmidt/sitework-ai> · Live demo: <https://pcschmidt.github.io/sitework-ai/> · License: MIT (code; the Ultralytics/YOLO11 combination carries AGPL-3.0 obligations — README "License") · Last commit: 2026-09-27 (`defe1b8`)
-Status: complete portfolio project (M0–M7 closed, PLAN.md) · active 2026-09-15 → 2026-09-27; activity after [Unknown]
-Explainer generated: 2026-10-18 by an AI agent under Chris Schmidt's direction · Questionnaire v1.1 · Depth: LITE (LITE run)
+*A prototype that watches ordinary camera video for dangerous moments between people and vehicles, has an AI agent look at each alert, and has a plain-code checker recompute the agent's numbers.*
 
-> Tags: **[Verified]** seen in code/config/commits/CI · **[Measured]** read-only command this session (no tests, builds, installs or repo-code execution — `git`/`gh` only) · **[Documented]** stated in repo docs or committed artifacts · **[Author]** confirmed `AUTHOR_CONTEXT.md` line (⚠ lines there = [Inferred]) · **[Inferred]** reasoned · **[Proposed]** not in the repo · **[Unknown]** → §26. Line refs: commit `defe1b8`. One fact, one home: claims §11, discrepancies §24, records §20.
+Status: a finished portfolio prototype, last code change on 27 September 2026. Code: https://github.com/PCSchmidt/sitework-ai (code under the MIT licence; the object-finding model and its library carry a stricter licence, described later). A recorded demo of the real dashboard is public at https://pcschmidt.github.io/sitework-ai/.
 
-## TL;DR
+I built SiteWatch AI to show a way of combining two kinds of software that are usually kept apart. Warehouses and building sites mix heavy machinery with people on foot, and the worst accidents come down to a few situations: a forklift gets too close to a worker, someone stays too long inside a danger zone, or a vehicle goes too fast. SiteWatch AI takes video from an ordinary security camera, finds every person and vehicle in each frame, works out their real positions on the floor in meters, and checks written safety rules against those positions. When a rule fires, it hands a few seconds of evidence to an AI agent, which re-measures the event by writing and running code and then labels it. A separate piece of plain code, which I will call the gate, then recomputes the agent's key numbers from the same evidence and refuses to record a result that disagrees with them. Think of the gate as a referee: it does not play, it only checks the score.
 
-**V.1 ★** SiteWatch AI watches simulated warehouse/site camera video, measures people and vehicles in meters on the floor, fires fixed safety rules (forklift near a person, person in a hazard zone, speeding vehicle), and when a rule fires sends the tracking data — never raw video — to a Prime Agent RLM that verifies the incident by running Python on it; then plain code (`agent/band3.py`) independently recomputes the key numbers, and only then is the incident stored as `confirmed` or sent to human review. [Verified] `rules.py`, `worker.py`, `band3.py`
+There is no real site and no real camera: the "cameras" are three short stock video clips played on a loop. Everything else is real, working code, and I did not write it by hand. AI coding agents wrote almost all of it while I directed the scope, plan, architecture and preferences.
 
-**V.2 ★** For safety/ops staff where unverified alarms get ignored and unverified AI numbers are dangerous. The repo reports 35.0 FPS detection at 1080p (3 streams × 30.2 FPS TensorRT FP16 rested, 9.5–13.2 sustained) and agent results (26/30 first-pass on 30 fixtures, all misses timeouts; 82.1% agreement), negative results kept [Documented]. The interest is the discipline: the AI computes instead of asserts, a deterministic gate checks it, and the recorded demo shows the gate catching the agent misclassifying a real intrusion (`ui/public/showcase/evidence/…/earlier_runs.json`) [Verified, L1]. This review adds: the gate's proximity recompute spans the evidence window while the fast plane's claim spans only the current rule state (false `needs_review` risk, W-ARCH-1) [Verified]; the agent's value over just recording the trigger has no measured baseline (W-EVAL-1) [Verified]; speed verdicts pass on schema alone (W-AI-1, disclosed) [Verified] `band3.py:18-19`.
+Here is what is fixed and what is learned. A calculator is deterministic: the same input always gives the same answer. A weather forecast is probabilistic: it is a best guess that can be wrong. SiteWatch AI is built on that split on purpose. The deterministic parts are the safety rules, the geometry that turns picture positions into floor positions, the gate and the database. They give the same output for the same input. The probabilistic parts are two learned programs. The first is the object finder, a model trained on a large collection of labelled pictures. What it sees depends on that training, and it can miss things in ways nobody wrote down. The second is the language model behind the agent, which writes its answer one word at a time with some chance built in, so the same incident has been answered two different ways on different runs. Chance and approximation also enter through a few assumed numbers in the camera set-up and a test set of only 30 incidents. To keep these in check, the learned parts never decide whether a rule fires, the agent must compute its numbers rather than guess them, the gate re-checks what it can, the agent has a hard time limit, and anything doubtful goes to a person.
 
-## Repository fact sheet
+![Which steps are learned and which are fixed rules or formulas](images/sitework-ai-learned-vs-rules.png)
 
-| Field | Value | Tag / source |
+The one idea that makes the project work is a split into two lanes with a referee between them. The fast lane does everything that has to happen on every frame, with no AI cost. The slow lane runs only when a rule fires. The gate sits between the slow lane and the stored record, and the agent cannot talk its way past the numbers the gate checks. The gate has limits, and the chapter on methods says exactly what it checks for each kind of alert. If you only have ten minutes, read the chapters on what it does, the models, the results, and the strengths and shortcomings.
+
+Does it work? In a narrow frame, yes. The fixed rules ran on real stock footage and fired where they should. On 30 test incidents that I built by hand, the agent's answer passed the gate on the first try for 26 (87 percent), and all four failures were the same timeout, which the project then lengthened. On the labelling question, the agent agreed with the expected label on 23 of 28 labelled cases (82 percent), against 43 percent for a lazy guess of always giving the most common label. Two things hold those numbers back: the test incidents were hand-built, and no demo clip contains a genuine close call. Nothing here has been used for real work.
+
+In short, SiteWatch AI is a working demonstration of an AI agent used as a checked part of a safety system, with encouraging results on its own test set and no use outside a laptop.
+
+## What problem this solves
+
+Picture a loading dock. A forklift backs out of a bay while a worker walks behind it, and they pass within a meter and a half. Nobody is hurt and nobody writes it down. A near-miss is exactly that: an event that came close to harm without causing it. Safety teams today lean on spot checks, signs and reviews after the fact. A system that watches continuously could record near-misses and show where the danger is.
+
+The catch is that automatic alerts tend to fail in one of two ways. A system built only from fixed rules is fast, cheap and predictable, but it cannot tell a real near-miss from a glitch in the tracking or from harmless normal work, so it floods the operator with false alarms. A system that hands everything to a large language model (the kind of AI that powers chat assistants) can reason about context, but it is slow and costly to run on every frame, and it can state a distance with total confidence and be wrong. That is a poor fit when the question is "how close did the forklift actually get?"
+
+My goal was a middle path. Keep the part that applies the safety rules fixed and easy to audit, meaning easy for someone else to trace and check. Use an AI agent only where judgment helps, which is deciding whether a flagged event was a real near-miss. Make the agent compute its answer rather than assert it, and put the gate behind it. The plan sets six success tests and lists what the project deliberately does not do: no live deployment, no real customer site, no control of real safety hardware such as an emergency stop, and no training of an object finder from scratch.
+
+Commercial products already do camera-based safety monitoring, and they are far more capable than this. A skeptic would ask, "Why not just use one?" It would do the job better, but it would not show how to build the checking around the AI, which is the point here. The project also fits the central idea of my portfolio: systems should be checked before they are trusted.
+
+In short, the project tackles the dilemma between false alarms and unreliable AI by splitting the work and checking the AI with plain code.
+
+## Where the project came from
+
+The idea began as a conversation with the Gemini AI assistant, which is saved in full in the repository. I had been using an open-source agent tool called Prime Agent and wanted to build something that used its ability to run a language model that writes and executes code. I then decided to build a separate app, outside my coursework repository for a Johns Hopkins University computer-vision course, as a portfolio piece showing a complex, deployable AI-enabled system. The project's documents record the same decision: a standalone application, with the coursework staying purely fixed-rule and this one a mixture of fixed and learned parts.
+
+In short, SiteWatch AI began as a chat about agents and became its own portfolio application.
+
+## What it does, step by step
+
+SiteWatch AI does four things in order. It sees: an object finder locates every person and vehicle in each frame, and a tracker follows each one from frame to frame so that "person 42" stays person 42. Each followed object is called a track. It measures: a one-time camera set-up, called calibration, turns positions on the screen (pixels) into positions on the floor in meters. It decides: written rules check those floor positions every frame. It verifies: when a rule fires, the agent re-checks the event and the gate checks the agent.
+
+Here is one incident from the project's own demo. The warehouse-aisle clip shows a pedestrian walking into a cross-aisle that is meant for forklifts only. The system tracks that person as track 9. The floor position puts them inside the forklift-only zone, and the zone rule says a pedestrian must not stay in it for 3 seconds. After 3.0 seconds the rule fires, and the system saves the surrounding tracking data (67 frames, about the few seconds around the event) and a short video clip. The agent opens the tracking data in a live programming session, writes code to measure how long track 9 was in the zone, and answers "violation". The gate then recomputes the time in the zone from the same data, gets 3.00 seconds against a limit of 3.0, agrees, and stores the incident as confirmed. The dashboard shows it.
+
+![One incident from start to finish](images/sitework-ai-journey.png)
+
+The nearest everyday comparison is a camera operator, an auditor and an inspector. The operator watches every screen all day and shouts when a fixed rule is broken. The auditor is called only then, studies the recording and writes a report. The inspector re-measures the auditor's numbers with a tape measure before the report goes on file. The comparison breaks down in one way: this auditor is an AI, and it will sometimes answer the same question differently on a different day.
+
+The intended user is a safety manager, who would see a live feed of incidents, a queue of "needs review" items to confirm or reject, and the evidence for each. Only I have used it, and the public demo replays recorded output. Everything is automatic except one thing: a person can record a review decision on a flagged incident through a form on the dashboard. That review is a record. It does not change the incident's state or stop anything. Use in a government or defense setting would need much that does not exist here: sign-in, protected data handling, approvals, and a way to run with no internet, which the hosted-model agent rules out today.
+
+In short, video goes in, a checked and labelled incident record comes out, and every step but one human review form is automatic.
+
+## The parts, the data and the rules
+
+The system is a set of small programs that each do one job and pass work along a line. One program per camera finds and follows objects, applies the rules and saves the evidence. A second program takes each alert, starts the agent and applies the gate. A database stores the results, and a web dashboard shows them. The pieces run in Docker, a way of packaging a program with everything it needs. The names of the specific tools are in the code list at the end.
+
+![The main parts of the system](images/sitework-ai-parts.png)
+
+The dashed box is something the original design promised and I did not build: an alarm output. Rules fire within milliseconds, but nothing sounds a siren from them. A person sees an incident only after the agent step, which takes about a minute.
+
+Everything that passes from one part to another is a small, strictly checked data packet: a snapshot of tracked objects in one frame, a record of which rule fired, or an incident record holding the verdict. The checker rejects extra fields, impossible values and unknown labels, and the agent sees only these packets, never raw video.
+
+Three rules of behavior hold the design together. A record is either confirmed or marked "needs review", and nothing is silently dropped: if the agent times out, crashes or writes something malformed, the incident is stored for a person with the reason. A camera whose calibration is not accurate enough, with an average error above 2.0 pixels, loses its distance and speed rules instead of reporting numbers nobody can trust. And each rule has a cool-down, a pause before it can fire again for the same situation, so one event does not raise a stream of alerts. If the agent program crashes, the alert is not marked done and another worker picks it up after five minutes, and records are written so that processing an alert twice does no harm.
+
+The data comes in three kinds. The demo clips are 12 to 25 second stock videos from Pexels, looped, and the project records each one's source and licence. For scoring the tracker, the project uses MOT17 (Multiple Object Tracking benchmark, 2017), a public set of crowd videos with people labelled frame by frame. The 30 test incidents are small hand-built scenarios, each holding an alert, the tracking data and the expected answer. The clips and the object finder's downloaded model file are kept out of the repository, so a fresh copy has to fetch them.
+
+The weakest link is the agent's runtime. Prime Agent is not on the public package registry, so the agent container builds only from a copy saved locally, and a stranger cannot rebuild it. If the video grew tenfold, the first limit would be the graphics card, which meets the speed target only when cool.
+
+In short, the parts are simple and separated by strict data packets, and the biggest practical weakness is that outsiders cannot rebuild the agent's runtime.
+
+## The methods and the arithmetic
+
+Most of the thinking sits in a few small methods, in the order a frame meets them.
+
+**Following objects.** The tracker is ByteTrack, a published method for linking each new frame's boxes to the tracks already being followed. Imagine a teacher taking attendance by remembering where each child was a moment ago and expecting them nearby. As I understand the published method, it matches boxes by overlap and also uses low-confidence boxes to keep a track alive through brief blocks. It comes inside the library that supplies the object finder and is used as supplied.
+
+**Turning pixels into meters.** This is the heart of the geometry. A camera sees a flat floor as a distorted picture, and a person's floor position is where their feet touch it, which the project takes as the bottom centre of their box. A homography (a mapping between one flat surface seen from two viewpoints) turns that pixel into a floor position. Toy example: suppose the four corners of a 100 by 100 pixel square are known to be the corners of a 2 by 2 meter square. The mapping then sends the pixel (50, 50) to the floor point (1, 1). The calibration's quality is how many pixels, on average, the known points land from where they should. In that toy case it is zero. Four points always fit exactly, so a quality check needs spare points: add a fifth at the centre, pick one corner wrongly by 3 pixels, and the average error becomes about 0.4 pixel, well inside the project's limit of 2.0. A failing score needs larger errors or more points. The project has three ways to build the mapping, depending on whether someone could measure real points on the floor. The two methods that work from lines in the picture need one assumed number, the height of the camera, and the dock demo estimates it from the spacing of a forklift's wheels and a worker's height. The project records that this makes every distance good to about 8 percent, one reason I treat its meters as estimates.
+
+![A camera picture turned into floor positions](images/sitework-ai-floor.png)
+
+**Speed.** A speed measured over one frame is too jumpy. At 18 m away, one pixel of jitter in a box is about 7 cm, which over a tenth of a second reads as 0.7 m/s of fake speed. The project instead measures movement across about one second of history and reports a speed only once at least half a second exists.
+
+**The three rules.** A proximity rule fires when a person and a vehicle stay within a set distance for a set time. A zone rule fires when a person stays inside an area drawn on the floor for a set time. A speed rule fires when a vehicle goes faster than a limit in a zone. The settings in the repository include a forklift within 3 m of a pedestrian for 2 seconds, a pedestrian in the forklift-only aisle for 3 seconds, and a vehicle over 2.2 m/s on the dock. In the project's tests, a person 4 m from a vehicle for 3 seconds and then 1 m away for 3 seconds fires a 5 m warning rule at 2 seconds and the 3 m rule at 5 seconds.
+
+**The gate.** Its checks differ by kind of alert, and this is where the limits of the project's main promise sit. For a proximity alert, the gate rereads the saved tracking data, measures the distance between the two tracks in every frame and takes the smallest. Worked example from the project's own test incident: a person's distance from a forklift in four frames, one second apart, is 5.0, 3.0, 1.2 and 1.6 m. The smallest is 1.2 m, and the closing speed at that point is the drop from the frame before, 3.0 minus 1.2 divided by 1 second, or 1.8 m/s. The gate then compares what the fast lane and the agent claimed with those numbers, allowing 0.15 m or 5 percent of the claim, whichever is larger. For a zone alert, the gate recomputes the unbroken time the person has been in the zone at the moment of the trigger. In the project's tests, a person in the zone at 996, out at 997, and back in from 998 to 1000 has been in for 2 seconds at the trigger, not 4. A "violation" verdict needs that time to reach the limit, within 0.2 seconds, and a "false positive" verdict needs that it did not.
+
+So the gate's promise is narrower than "the AI never has the last word". For proximity it checks numbers only: when the test incident above, with a true closest approach of 1.2 m, was fed to it with the labels "violation", "normal operations" and even "false positive", it accepted all three. For zone alerts it checks the time and the verdict together. For speed alerts it checks the format of the answer and nothing else. The project's README already admits the gate cannot catch a plausible wrong judgment between allowed labels, and this check shows the gap is wider than "plausible".
+
+In short, the arithmetic is school-level geometry and averaging, small enough to check by hand, and the gate checks numbers for some alerts and format for others.
+
+## The models and what they do
+
+SiteWatch AI uses two learned models and no model it trained itself. The learned parts only suggest; whether a rule fires is decided by fixed code.
+
+**The object finder: YOLO11s.** YOLO (You Only Look Once) is a family of object finders that look at a whole picture in a single pass, which makes them fast. YOLO11s is the small size of the eleventh version, supplied by Ultralytics. A frame goes in, resized to 640 pixels across. Out come boxes, each with a class name and a confidence between 0 and 1. The model learned from COCO (Common Objects in Context), a large public collection of everyday pictures labelled with 80 kinds of thing such as person, car, bus and truck. The project keeps boxes above a confidence of 0.4 and groups car, bicycle and motorbike into one class called vehicle. Its model file is downloaded at set-up.
+
+Why this model? It and the smaller "nano" version both ran at about 35 frames per second on one 1080p stream, limited by video decoding rather than the model, so the more accurate one cost nothing. A transformer-based finder (RT-DETR, Real-Time Detection Transformer) was planned as a comparison and never benchmarked, and open-ended finders that take a typed name, such as Grounding DINO, were judged too slow.
+
+Where does it fall short? COCO has no forklift or excavator class, which matters in a project about forklifts. The project tried three workarounds. Treating COCO "truck" and "bus" as a stand-in called "heavy vehicle" fired 325 times across the 304 frames of the real forklift clip (so it does fire on the forklift in real footage, though the count does not say how many hits were other trucks), but on synthetic warehouse images it found only 14.5 percent of forklifts. YOLO-World, a finder that works from a typed name, scored zero on the synthetic test. Training YOLO11s further on synthetic forklift pictures scored a weak 0.247 and found a forklift in none of the 304 real frames, the gap between simulated and real pictures. So the stand-in shipped because it was the only option that worked on the real clips, and the demo's alerts about "vehicles" should be read as alerts about something big and truck-shaped. The missing excavator class shows on the demo, where only the operator in the cab is boxed.
+
+**The speed-up: TensorRT.** TensorRT is NVIDIA's tool for compiling a model to run faster on its graphics cards, and FP16 (16-bit floating point) is a half-precision number format that is faster and slightly less exact. On one stream, the compiled version was 34 to 57 percent faster. The project did not compare its detections with the plain version, and it is not the default in the running pipeline, so the speed-up is a measurement and not a promise.
+
+**The agent: Prime Agent driving a language model.** Prime Agent is an open-source agent from Prime Intellect, built on the idea of a Recursive Language Model (RLM): a language model that works inside a live Python session, treating its inputs as data to compute on and calling further copies of itself like functions when a problem needs splitting. In plain terms, instead of reading numbers from a page and estimating, the agent loads the tracking file, writes code to measure the distance in every frame, and returns the result. The project runs it with no screen, one fresh process per incident.
+
+The model behind it is whatever is set in Prime Agent's own configuration. The documents say a small, cheap model reached through OpenRouter (a service that sells access to many models) was used in the tests, at fractions of a cent per incident. The repository does not record the exact model name. What goes in is a prompt plus two files, the alert and the tracking data. What comes out must be a JSON file (JavaScript Object Notation, a plain structured text format) holding a measured distance, a closing speed, a time to collision, a label and the inputs it used. The label is one of four: normal operations, near-miss, violation or false positive. For a proximity alert the prompt gives numeric thresholds: below 2.0 m is a near-miss and below 1.0 m a violation. For zone and speed alerts it asks for a judgment: the claim holds up, does not, or is ambiguous.
+
+Why this tool? The project's feasibility notes argue that the problem needs code-based verification, and a spike (a short time-boxed experiment) tested it for real. It produced correct, well-formed results in all five runs on a hand-computed incident, and in at least two of them noticed unprompted that the fast lane's claimed 1.7 m did not match its own 1.2 m. It did not solve everything. The tool's own turn limit did not stop a runaway task: a limit of 3 turns let it run 9 turns and over 130 seconds. So the real limit is a timeout enforced by the project's own code, which kills the process after 210 seconds. The alternative was a plain language-model call that returns JSON, which is simpler but gives the model nothing to compute with; a backup worker for that route exists only as a placeholder.
+
+Where it falls short: the agent is nondeterministic, and on the first live run it got the aisle incident wrong, as the results chapter explains. It is also used narrowly. The designed compliance-auditor, shift-summary, scheduled and model-routing roles were not built. A written policy file for the agent exists, but nothing sends it, so the agent's rules live only in its prompts. For proximity alerts a simpler method could arguably do the job, since the gate already computes the same numbers; the agent adds value in the labelling, where judgment enters.
+
+In short, a borrowed object finder and a borrowed agent do the learning, and fixed code decides when a rule fires and checks what it can of the agent's numbers.
+
+## Testing and edge cases
+
+An edge case is an unusual situation the program might not have been designed for. The project handles several of them. A calibration that fails its 2.0 pixel limit turns off distance and speed rules but leaves zone rules running, since they tolerate small position errors. Cool-downs are per rule, after a wide warning silenced a tighter rule. Speed rules skip pedestrians, after one fired on a walking worker. A missing evidence file becomes a "needs review" record, and a silent agent process is killed by the timeout.
+
+Small bad inputs were also tried against the rules. A tracking file with no frames, or one missing one of the two tracks, is rejected by the gate with a clear reason. An agent answer with an extra field, a negative distance, the word NaN ("not a number") or an unknown label is rejected by the format check, and the word Infinity passes that check and is then caught as a mismatch by the gate. The same probing found four real holes, and the shortcomings chapter lists them once.
+
+There are 191 automated Python tests. On a laptop 164 pass and 27 are skipped because they need a real database; in the project's automatic checks on GitHub those 27 run against a real database, and the latest run on the final commit succeeded. The code style checker and the strict type checker pass, as does the project's script that cross-checks its documents against the code. The tests use a stand-in agent that speaks the same protocol, so no real agent or model is called in them. Three tests spot-checked for this guide assert real behavior against hand-worked numbers: the zone case above, the 5 m and 3 m rules firing at 2.0 and 5.0 seconds, and a silent agent process killed in under 5 seconds.
+
+What is not tested: a full run with a real agent in the automatic checks (the agent tool cannot be installed there), prompt-injection attacks (hostile text hidden in data to steer the agent), the dashboard beyond six tests, and anything with real cameras. As for planning, the first commit holds the plan with six success criteria, written before any results. It was a plan, not a locked protocol with a rule for what counts as success, and its final statuses were added afterward.
+
+In short, the core logic is tested against hand-worked cases, and the main untested areas are the real agent in automation and hostile input.
+
+## Does it work? The results
+
+There are four sets of numbers, and none comes from a real site.
+
+**Detection speed.** One object-finder stream at 1080p runs at 35.0 frames per second on the laptop's RTX A4500 GPU (Graphics Processing Unit, the chip that does heavy parallel computing and that the finder runs on). The video was converted from native 4K because decoding 4K, not the model, was the limit. The plan's target was three streams at 25 frames per second each. The result depends on how hot the card is. After more than an hour of heavy use, the slowest of three cameras ran at only 9.5 frames per second with the plain model, or 10.9 with the compiled one. After the card rested, it ran at 24.6 plain, just under the target, and 30.2 compiled, clearing it. The project publishes both. A system running all day would live nearer the hot figures, so the target is met only for bursts.
+
+![Speed with three cameras on one laptop graphics card](images/sitework-ai-fps.png)
+
+**Tracking accuracy.** On three MOT17 crowd videos of 200 frames each, the project scored MOTA (Multiple Object Tracking Accuracy) of 0.158, 0.259 and 0.459, and IDF1 (Identification F1, how well each person's identity is kept over time) of 0.32, 0.46 and 0.61. MOTA is 1 minus the share of mistakes (misses, false alarms, identity switches), so a tracker that finds nothing scores 0. The project's notes say competitive entries score 0.60 to 0.80 or more, and that this general finder faces scenes much denser than the demo's. So these scores are a floor for crowded scenes and not a claim about site footage.
+
+**Agent checking.** The 30 built incidents were run one at a time through the real agent and the gate. Here "validated" means the agent's answer passed the format check and the gate as expected. Twenty-six of 30 did, which is 86.7 percent against a 90 percent target. All four failures were the same thing: the then 150-second timeout. Re-run with more time, all four finished correctly in 48 to 65 seconds, so the timeout was raised to 210 seconds, and the adjusted figure is 30 of 30. That adjustment was made after the fact on the same set, so I treat 86.7 percent as the honest first-try number.
+
+For labelling, the agent matched the expected label on 23 of 28 labelled cases, or 82.1 percent, against 42.9 percent for always answering with the most common label (violation, 12 of 28). Four of the five misses were the timeouts, and with those four cases re-run the agent matched on 27 of 28, or 96.4 percent, which is the top bar in the chart. The fifth miss, the only real disagreement, was a speed alert of 2.3 to 2.4 m/s against a limit of 2.2 that the agent called a near-miss. That is a defensible judgment under the prompt, so it looks like a labelling mistake in the test set, and the project left it uncorrected rather than move the goalposts. The incidents were built by hand, and the repository does not say who wrote the labels.
+
+![Agent classification compared with a simple guess](images/sitework-ai-agent-eval.png)
+
+**The demo incidents.** On the real clips, the full chain ran. On the dock clip the 5 m warning fired at 4.20 m, the agent recomputed 4.20 m and called it normal operations, and the gate confirmed. On the aisle clip the zone rule fired after 3.0 seconds and the agent returned violation, confirmed. Getting there is the most instructive part of the build.
+
+![How the gate caught the agent's mistake and what fixed it](images/sitework-ai-gate-catch.png)
+
+On the first live run the agent called the intrusion a false positive although the person was in the zone for about 8 seconds, and the gate had no zone check. A zone check was added. On a later run the agent made the same mistake and the gate sent the incident to a person. The saved transcript showed why: the agent saw only the rule's name, "intrusion forklift aisle", and read it as a forklift intruding. The prompt now includes the rule's definition, and the next run was right. The caught run is kept in the demo, labelled as earlier.
+
+**What did not work.** The object finder cannot see forklifts or excavators as such, one demo camera's calibration is deliberately unverified, the goal of fewer than five agent calls per ten minutes of video was never measured, and the three-camera speed target was met only on a rested card.
+
+The numbers in this guide match the files the project cites. Nobody has repeated them from a clean copy, and the full pipeline needs a graphics card, manual downloads and a copy of Prime Agent that outsiders cannot obtain.
+
+In short, the speed and agent results come from one laptop and hand-built incidents, and the clearest evidence of the design working is the one run where the gate caught the agent.
+
+## Could it be put into real use?
+
+No part of this has been operated for real users. The only reachable piece is the demo page, which replays recorded output including two real agent sessions; the repository shows no stars or forks. On a ladder from experiment, to works locally, to deployable, to operated, SiteWatch AI sits at works locally, with a good start on deployable: the full stack runs from one command with Docker, a replay stack with no graphics card and no AI runs from a fresh copy with only Docker, and the automatic checks run the tests.
+
+Against usual production habits the picture is mixed. Automatic checks run the tests, the style and type checkers, the document check and validation of the cloud files, so a bad change is blocked, but no accuracy test can fail the build, because the agent is not available there. Failure handling is good for the agent step (timeout, safe re-runs, nothing silently dropped) and weaker elsewhere. Reviews are recorded but nothing depends on them, and the reviewer's name is typed in with no sign-in. There is no authentication, and network ports are bound to the local machine by default.
+
+Some practices do mirror real work: a time-boxed spike before building the agent step, which found a limit that did not work; an external timeout added because of it; a test set whose timeout failures led to a measured change; a gate that caught a real agent error; recorded incidents that replay without paying for AI; and cloud configuration files for Amazon Web Services, Google Cloud and Microsoft Azure that pass validation and were deliberately never applied.
+
+To deploy it for real users it would need hosting, sign-in, an alarm output, a rebuildable agent runtime, monitoring, video retention rules, a cost cap, a security review, an operating guide, a different detector licence and a safety case. Most are missing or only on paper. Three small steps would help most: run the real agent on a schedule once its package is obtainable, add a job that fails the build if agent accuracy drops, and write a short postmortem of the aisle incident. As a showcase it suits an engineering conversation about checking AI, but a safety system with an unauthenticated interface and a licence limit should not be put on the public internet.
+
+In short, SiteWatch AI works on a laptop and as a recorded public demo, and is well past an idea but short of anything operated.
+
+## Strengths, shortcomings and the work still to do
+
+The project's strongest feature is how it treats the AI: the agent computes rather than guesses, a plain-code gate checks what it can, failure becomes a review rather than a lost event, and a real catch is kept in the demo. The repository's documents also separate what was built from what was not, and publish the hot-card speed numbers beside the best case.
+
+The shortcomings fall into three kinds. Defects are things that are wrong. A damaged line in a tracking file makes the gate raise an error instead of rejecting politely, and from a reading of the code the alert would then be retried every five minutes without end, though I did not run that loop end to end. Speed alerts pass the gate on format alone. The calibration step accepts four points on a straight line, which cannot define a floor, and scores them at 1.15 pixels, inside the 2.0 limit. Confirmed incidents written by the real agent have an empty narrative field, although the documents describe each as carrying one. A tracker the project wrote is not used, and a per-track uncertainty value is always zero although the design said it would carry evidence quality.
+
+Gaps are things missing: no alarm output, no live video overlay (the overlay replays recorded output), no helmet-and-vest detection, no authentication, no hostile-input testing and most of the planned agent roles. Deliberate limits are stated in the plan: no live deployment, no real equipment control, no real customer.
+
+Three shortcomings matter most. First, nothing here shows accuracy on real incidents: the test incidents were built by hand, the clips contain no real close call, and the demo adds a 5 m warning ring so something fires. Second, the licence: the code is MIT, but the object finder and its library are under AGPL-3.0 (GNU Affero General Public License, a licence that requires sharing the source of software offered over a network), so any commercial or hosted use needs a commercial licence or a different finder. Third, the documents overstate in a few places. The GitHub description calls it a "multi-agent operations platform" for "chemical handling facilities" although one agent role runs and no helmet-and-vest detection exists, and the README says confirmed incidents carry a written narrative when the real agent's incidents have none.
+
+The fixes are small: make a damaged file produce a review record, check that calibration points are not on a line, accept a proximity "false positive" or "normal operations" verdict only when the numbers support it, and correct the documents. The core is built and tested: detection, tracking, calibration, rules, evidence capture, the agent adapter, the gate, storage, the dashboard, replay mode and the cloud files. The extra agent roles, model routing, a real forklift class, an alarm output, authentication and live track streaming are not built.
+
+Is it finished enough for its purpose? For a portfolio reference design, yes, and the project calls itself complete. The smallest work that would make it more convincing is a real close-call recording, the gate fixes, and an accuracy test on data not built by hand. I would polish and freeze it rather than extend it. Cost is near zero: the real agent costs about 0.2 cents per incident on the model the documents describe.
+
+In short, the defects are small and fixable, the largest risks are the hand-built test data and the licence, and the best next step is repair and a real recording rather than new features.
+
+## How it was built, and who did what
+
+AI coding agents wrote almost all of the code, and I directed the scope, plan, architecture and preferences. I did not write the code by hand and I do not claim to have. The repository's README says the codebase was built with Claude Code, and 43 of its 55 commits carry a co-author credit for Claude: 37 for Claude Sonnet 5 and 6 for Claude Opus 5.5. The 12 uncredited commits are all from the first two days. The agent that runs inside the product, Prime Agent, is a component and not the builder. The original idea came out of a Gemini conversation, as described earlier.
+
+The decisions I directed are recorded in the plan and the design records: the two-lane split, the rule that AI never sits in the path that decides whether a rule fires, local-first with nothing paid, cloud as checked files only, the cuts to scope, and the milestones with their acceptance tests. Short spikes came first, several fixes mention real bugs found by running the stack, and a late-September documentation pass compared claims with the code. The work landed between 15 and 27 September 2026 in 54 commits, plus one documentation commit on 19 October, 55 in all.
+
+In short, I steered the design and scope, the agents wrote the code, and the history shows frequent self-correction.
+
+## For recruiters and interviewers
+
+**In thirty seconds.** I directed AI coding agents to build SiteWatch AI, a prototype that watches video for forklift and worker hazards with fixed rules, then uses an AI agent to examine each alert by computing, with a plain-code gate recomputing its key numbers. **In two minutes**, add that it uses an object finder and a language-model agent, has 191 tests, ran on real stock footage, and was measured on a 30-incident test set where the agent passed the gate 87 percent of the time on the first try and agreed with the expected label 82 percent of the time. Nobody but me has used it.
+
+**What it demonstrates.** System design around AI, measurement and plain reporting, safety thinking (no AI in the path that fires a rule, a limit on the agent, a review queue), cost control, and directing AI agents with a written plan. It does not demonstrate operation for real users, on-call work, teamwork, scale, or building from scratch live.
+
+| Typical requirement | What the project shows | Fit |
 | --- | --- | --- |
-| Name | SiteWatch AI (`sitework-ai`) | [Verified] |
-| URL · visibility · license | github.com/PCSchmidt/sitework-ai · PUBLIC · MIT | [Measured] `gh repo view` |
-| One-line (from code) | YOLO/ByteTrack/homography/rule pipeline → schema-validated trigger → RLM verification → recomputation gate → Postgres/FastAPI/React record | [Verified] |
-| Category · flags | physical-AI CV + geospatial safety app · `[UI] [API] [DATA] [MATH] [AI] [AGENT] [DEPLOY]` | [Inferred] |
-| Status | "complete (milestones M0–M7)", portfolio project | [Documented] README, PLAN.md |
-| Languages / LOC | Python ~10.1k (81 files); TS/TSX ~2.6k; Terraform ~0.9k; YAML ~0.8k; 39 .md docs | [Measured] `git ls-files` |
-| Files · tests | 330 tracked; 26 Python test files (184 `def test_`) + 1 UI test (6 cases); repo reports 191 collected (164 offline + 27 Postgres) — not run | [Verified] count; [Documented] README |
-| Commits · period | 54 commits, 2026-09-15 → 2026-09-27, one branch, no tags; all authored "Chris Schmidt"; 42/54 carry Claude co-author trailers (37 Sonnet 5, 5 Opus 5.5) | [Verified] `git log` |
-| Entry points | `make replay-up`/`make up`; CLIs `pipelines.geometry.calibrate`, `pipelines.vision.record`, `scripts/*`, `evaluation/{agent_eval,benchmark_models,eval_tracking}`; `api/main.py`; `agent/worker.py`; `ui/` | [Verified] Makefile |
-| Clean clone | full stack **no** — clips, `yolo11s.pt`, `prime-agent` outside git; `make replay-up` (Docker only) is the zero-setup path, "tested from a fresh clone on 2026-09-26" | [Documented] README, PLAN.md S1; not re-run |
-| Tests pass? | [Unknown] this session (no execution); CI green observed in run history | [Measured] `gh run list` |
-| CI | `ci` (ruff, mypy, pytest+Postgres, `check_docs.py`, schema-export diff), `ui`, `compose`, `contract-agent` (golden RPC replay), `iac-check` (terraform ×3), `pages`; latest `main` runs success | [Verified] workflows; [Measured] `gh run list` |
-| Live demo / media | hosted static dashboard (recorded output + real transcripts); showcase GIF; page not fetched | [Verified] `pages.yaml`; liveness [Unknown] |
-| External services | none at runtime (Redis/Postgres/MediaMTX in Docker); agent needs a provider in `~/.prime` (evals: OpenRouter GLM-Flash class); inputs are pinned manual downloads | [Verified] compose, `data/manifests/` |
-| AI coding tools | Claude (42/54 trailers); Gemini in ideation artifact `project_concepts_ideas.md`; no `CLAUDE.md`/`AGENTS.md`/`.claude/` tracked | [Verified] |
-| Related repos | ⚠ AUTHOR_CONTEXT [Inferred]: physical-AI/edge family; built **without Meridian**, comparison baseline to VERA (B.22) | [Inferred] |
-| Headline claims | 15, audited §11 (CL-01…CL-15) | [Verified] |
-| Scripts writing tracked files (not run) | `make showcase`/`showcase-agent` rewrite `ui/public/showcase/**`; `generate_report.py` → `docs/benchmarks.md`; `schemas.export` → `schemas/` | [Verified] Makefile |
-| Tests needing externals | 27 Postgres integration tests (`integration` marker); contract test replays a committed fixture; no GPU/network tests | [Verified] `pyproject.toml` |
+| Agentic workflows with human oversight | One agent role, a gate, a review record | Partial: one agent, not a multi-agent system |
+| Evaluating AI output | 30 built incidents, a simple-guess baseline, timeouts diagnosed | Partial: built data |
+| Choosing models and trade-offs | Forklift workarounds, model-size benchmark, agent spike | Demonstrated, with failures recorded |
+| Deploying and monitoring | Docker stacks, validated cloud files, recorded demo | Simulated: never operated |
+| Governance and documentation | Design records, threat notes with status, licence notes | Demonstrated |
 
----
+The strongest role family is the applied language-model and agentic-workflow engineer. The machine learning and MLOps fit (MLOps being the work of running models in production) is partial, since nothing was trained or monitored in production. The forward-deployed fit, meaning working with a customer on their own site, is weakest, since there was no customer.
 
-## 1. For everyone: what it does and why it matters (A)
+**Likely questions.** What is it in a sentence? A prototype where fixed rules watch video and an AI agent examines each alert, with plain code recomputing the agent's key numbers. What was the hardest problem? Getting the agent right on the aisle incident, which took a gate change and a prompt fix. A decision that turned out wrong? Giving the agent only the rule's name; the saved transcript showed the misreading and the prompt now includes the rule's definition. How do you know it works? The tests pass and the agent was measured on 30 incidents, built and not real. What would you change? Record a real close call, fix the gate's gaps, and measure on data not built by hand. How would you put it in production? Not as it is: it needs sign-in, an alarm output, monitoring, a rebuildable agent runtime and a different detector licence, and I have not operated it.
 
-**A.1 ★** It watches camera video of a warehouse or site and automatically catches the three situations behind most serious accidents there — a vehicle too close to a person, someone standing in a danger zone, a vehicle going too fast — producing a checked, auditable record of each. [Verified] `rules.py`, README.
+**Tough questions.** *Isn't this a wrapper around someone else's models?* Partly: the object finder and the agent are borrowed. The geometry, rules, gate, evidence handling, tests and dashboard are the project's. *If agents wrote the code, what did you do?* I set scope, architecture and what counted as done, and I judged results. *Why should I believe the numbers?* They match the committed result files, with the caveats in the results chapter. *What if the input is malicious?* The format check helps, but there are no prompt-injection tests and no sign-in; I would not expose it.
 
-**A.2 ★** Before it: a person watching many screens, or a rules-only alarm system whose alerts nobody acts on. [Documented] README "Motivation".
+**What not to exaggerate.** It is a prototype, not a product. There is no real site, the demo is recorded, the agent is one role, and I did not write the code by hand.
 
-**A.5 ★ Analogy.** A factory with two quality stations. Station 1 (fast plane) is a tireless inspector with a tape measure: every frame she measures where everyone stands, in meters. When her rule says something dangerous happened, she hands a dossier to Station 2 (the AI) — a consultant who reads the numbers, runs calculations, writes an opinion. Before filing, a third person (the gate) re-measures with the same tape; disagreement goes to a human, and nothing is thrown away. [Inferred] from README "The big idea".
+In short, the project shows how to build checking around an AI component, and it does not show production operation.
 
-**A.10 ★** It cannot see a real site (three looped stock clips), has no forklift/excavator class (trucks stand in; the yard clip boxes only the cab operator), sounds no alarm, quotes meters only where calibration is trustworthy, and its AI verdicts are nondeterministic and only partially gated. [Documented] README "Limitations"; [Verified] `band3.py:18-19`.
+## Glossary
 
-Others: information comes from the clips you feed it (A.7); a wrong record surfaces as `needs_review` with a reason — trust geometry and the gate, treat AI class labels as advisory (A.8); the AI re-checks fired events by running code, never decides whether a rule fired (A.9); ~$0.002 per incident (A.11) [Documented]; nothing leaves the machine except LLM calls with tracking numbers; ports bind localhost by default though the API is unauthenticated (A.12); built in ~12 days by Chris Schmidt directing Claude Code (A.13) [Verified]; a paid product needs real sites, alarms, auth, real detector classes (A.15) [Inferred]. All [Verified] unless tagged.
+- **Agent:** an AI program that works toward a goal by taking steps, here by writing and running code.
+- **Calibration:** the one-time set-up that turns picture positions into floor positions in meters.
+- **Cool-down:** the pause before a rule can fire again for the same situation.
+- **Gate (referee):** the plain-code check that recomputes the agent's numbers; the design calls it the band-3 gate.
+- **Homography:** a mapping between a flat surface seen from two viewpoints.
+- **Lanes (fast and slow):** the fast lane runs on every frame with no AI; the slow lane runs only when a rule fires.
+- **Needs review:** the state of an incident the gate could not confirm; it waits for a person.
+- **Track:** one object followed from frame to frame.
+- **YOLO (You Only Look Once):** a family of fast object finders.
 
-Improvement records: none for Part A.
+## Where to look in the code
 
----
+This list is for engineers; other readers can stop here.
 
-## 2. Purpose, problem, users and use cases (B)
-
-**B.1 ★ Problem.** Sites mixing heavy machinery with people on foot face proximity, zone-dwell and speeding hazards daily; each needs a human to notice it on camera today, and unverified alerts get ignored. [Documented] README.
-
-**B.11 ★ Users.** Primary: a safety/ops engineer wanting automatic explainable incident records (needs Docker). Secondary: a reviewer clearing the `needs_review` queue (`api/main.py` review route). Edge: portfolio viewer on the static demo. Poorly served: real camera estates (no auth, no alarm), PPE compliance needs. [Documented] `docs/01`.
-
-**B.12 ★ Use cases** (inventory §3): measure forklift-near-worker events with evidence — **working** (dock demo 4.20 m); queue unconfirmed events with reasons — **working**; catch zone intrusions — **working** on 1 of 3 demo cameras; see the chain without a GPU — **working** (Pages demo / `make replay-up`); deploy to cloud — **documented only** (validated Terraform, ADR-004).
-
-**B.18 ★ Out of scope.** Real sites/live cameras, alarms/E-stop, PPE, forklift/excavator classes, SaaS, training detectors, live cloud video, the designed multi-agent roles. [Documented] PLAN.md "Non-Goals", `docs/05`.
-
-**B.19 ★ Success measured.** FPS/latency/VRAM matrices; MOTA/IDF1; agent pass rate/agreement/wall time (n=30); terraform validate; test counts. Not measured: PLAN.md S3 (LLM calls per 10-min clip — "Not measured"), user outcomes, real-footage false-alarm rate. [Documented] PLAN.md §3.
-
-Others: B.2 motivation is portfolio-thesis work plus a test of "can an RLM agent run as a headless application component?" [Documented]; idea provenance is `project_concepts_ideas.md` (human vs Gemini share [Unknown]). B.20 failure: a missed incident or an ignored alert. B.22: per ⚠ AUTHOR_CONTEXT [Inferred], built **without Meridian**, serving as the comparison baseline to VERA — the "probabilistic components checked by deterministic gates" thesis in a physical-AI app, gates in plain code instead of the Meridian framework; no shared code. B.23 regulated use: auth, IL hosting, surveyed calibration, real detectors, SBOM [Inferred]; the author works in the defense sector [Author] `AUTHOR_CONTEXT.md` Q6 ANSWER.
-
-Improvement records: W-SCOPE-1 (Low).
-
----
-
-## 3. Capabilities inventory (B.12, J.1)
-
-| Capability | State | Evidence |
-| --- | --- | --- |
-| RTSP-simulated ingest (MediaMTX loops clips) | working | [Verified] `docker/mediamtx.yml` |
-| Detect + track (YOLO11s, ByteTrack, Kalman) | working | [Verified] `pipelines/vision/` |
-| Calibration: DLT points, vanishing points, level camera + motion compensation, 2.0 px gate | working | [Verified] `pipelines/geometry/` |
-| Rules: proximity, zone dwell, speed, per-rule cooldowns, severity tiers | working | [Verified] `rules.py:62-271` |
-| Evidence capture (tracks.jsonl + clip.mp4 ±5 s) | working | [Verified] `evidence.py` |
-| Agent verification via Prime Agent RLM (compute-not-assert) | working; 26/30 fixtures | [Verified] `prime_adapter.py`; [Documented] `docs/eval-m5` |
-| Band-3 gate (distance, closing speed, zone dwell) | working | [Verified] `band3.py` |
-| Postgres + REST/WS API + dashboard (feed, review queue, KPIs, shift report) | working | [Verified] `api/`, `ui/` |
-| $0 replay demo + hosted showcase with real transcripts; recorded camera overlay/floor plan | working | [Verified] `replay_demo.py`, `record.py`, `ui/public/showcase/` |
-| Speed-verdict gating; `duration_s`/`ttc_s` gating | **not built** | [Verified] `band3.py:16-19` |
-| Alarm consumer on `trigger_events` | **not built** (disclosed) | [Documented] README |
-| PPE, forklift/excavator classes, shift synthesizer, compliance auditor, watchdog, harness sub-agents | **planned, not built** | [Documented] `docs/05`, `docs/12` M7 |
-| API auth, container hardening, redaction, retention | **designed, not implemented** (disclosed) | [Documented] `docs/08 §2` |
-| Cloud deployment | **validated Terraform, deliberately never applied** | [Documented] ADR-004 |
-
----
-
-## 4. Domain perspective (C)
-
-**C.1 ★** Domain: industrial site safety + camera metrology. Modeled: tracks (persistent identities), ground positions in meters, zones (floor polygons), rules with numeric thresholds and dwell/duration windows, incident states (confirmed/needs_review), classification (normal_ops/near_miss/violation/false_positive). Geofencing usage matches practice; the classification vocabulary and `compliance citation` strings in `config/rules.yaml` are the project's own free text, not a standard taxonomy. [Verified] `models.py`, `rules.yaml`.
-
-**C.2–C.5** Followed: MOTChallenge metrics, Pydantic/JSON Schema. Ignored: OGC/CRS (local metric floor frame — appropriate per camera), OSHA-style categories. Misleading simplifications: a person is a box bottom-center point, so "0.7 m" is center-to-center and understates contact risk; forklifts are truck/bus proxies; floor static per camera. Missing: camera-health as trust input, occlusion uncertainty. [Verified]/[Inferred].
-
-**C.6–C.9** Sources: Pexels clips, YOLO11 weights (AGPL), MOT17 HF mirror (research-only), Mendeley CC BY 4.0 frames, NVIDIA HF stills, one author phone clip — license and SHA-256 pinned in `data/manifests/` [Verified]. Provenance per incident: evidence refs, transcript, rule citation [Verified]; staleness not modeled.
-
-**C.10–C.14** Deterministic geometry/thresholds; the LLM classifies fired events from recomputable data — acceptable subject to calibration error and detector blind spots. Assumptions recorded per camera (±8% dock distances) but numbers are point values to 2 decimals (W-MATH-1). No expert review recorded [Unknown] → §26.
-
-**C.15 ★** For a demo or design review: yes — the measurement chain, fail-safe degradation (uncalibrated → zone-only) and the gate's recorded catches are what a safety engineer wants. For a real decision: surveyed calibration with error bars, real detector classes, an alarm path with latency targets, auth, a real-footage false-alarm study, and the gate gaps closed (W-AI-1, W-MATH-1, W-OPS-1). [Inferred].
-
-Improvement records: W-MATH-1; Low: W-DOM-1.
-
----
-
-## 5. Codebase guide (D)
-
-**D.1 ★ Tree.** `pipelines/` ★ — vision ★ (`pipeline.py` loop, `detector.py`, `rules.py` ★, `evidence.py`, `kalman.py`, `record.py`), geometry ★ (`homography.py` ★, `vanishing_point.py`, `level_camera.py`, `motion.py`, `zones.py`, `calibrate.py`), broker, schemas ★ (`models.py`), config loader · `agent/` ★ (`worker.py` ★, `prime_adapter.py` ★, `band3.py` ★, `prompts/` ★, `transcript.py`, `persistence.py`, `worker_fallback.py` stub) · `api/` ★ (`main.py`, `db.py`, `repository.py`, `reports.py`, `schema.sql`) · `ui/src/` · `evaluation/` · `config/` ★ (YAML + `calibration/` JSON) · `tests/` (26) · `docs/` (13 numbered + ADRs + spikes) · `docker/` · `deploy/terraform/` · `scripts/` · `data/manifests/` · `schemas/` (generated) · root (`PLAN.md`, `Makefile`, `pyproject.toml`, `uv.lock`, captured Terraform-spec PDF). Deletable: the PDF, `project_concepts_ideas.md`, `ui/public/showcase/` (regenerable). [Verified].
-
-**D.2 ★ Entry points** — fact sheet row. **D.3 ★ Run locally** — Python 3.11+/`uv`; `uv sync` (multi-GB CUDA torch) then `uv run pytest`; `make replay-up` → localhost:5173; the full pipeline needs an NVIDIA GPU, hand-downloaded clips/weights and a vendored `prime-agent` (not on npm) — a fresh clone cannot run `make up` as-is (PLAN.md S1 "Partly met"). Not executed this session; the repo reports the replay path tested from a fresh clone 2026-09-26. [Documented].
-
-**D.7 ★ Key code.** `RuleEngine.process` (`rules.py:71`); `Homography.solve` + `calibrate_level_camera`; `pipeline.py run_stream`/`build_tracks`; `AgentWorker.process_one` (`worker.py:189`); `PrimeAdapter.prompt` (`prime_adapter.py:167`, 210 s supervisory kill); `band3.check` (`band3.py:155`); `pipelines/schemas/models.py`; `api/main.py`. [Verified].
-
-**D.8 ★ The function.** `band3.py:155 check(...)`: load the stored window; recompute min distance and closing velocity (or zone dwell) with the rule engine's own math; compare both the fast plane's and the agent's claims within 0.15 m / 0.2 m/s / 5% (0.2 s dwell); disagreement becomes a `needs_review` reason and the caller stores the incident either way. The thesis in 50 lines: probabilistic output is not trusted until deterministic code has re-derived it. [Verified].
-
-**D.17 ★ README accuracy.** Accurate and self-critical; `scripts/check_docs.py` gates doc consistency in CI. This review found 3 discrepancies (§24); the most visible is the GitHub description's "multi-agent operations platform" while one agent role runs. [Verified]; [Measured] `gh repo view`.
-
-Improvement records: Low: W-CODE-1.
-
----
-
-## 6. Tech stack and rationale (E)
-
-| Layer | Technology | Why (tag) | Alternatives |
-| --- | --- | --- | --- |
-| Language | Python 3.11; torch 2.11+cu128 pinned | CV/ML ecosystem, one language [Inferred] | Go, Rust, TS |
-| Perception | Ultralytics YOLO11s + ByteTrack + own Kalman | spike-00 picked 11s [Documented] | RT-DETR, YOLOX |
-| Geometry | NumPy SVD DLT, Shapely, ORB+RANSAC | auditable [Verified] | OpenCV built-ins |
-| Broker | Redis Streams + consumer groups | ADR-002 local simplicity | Kafka, SQS |
-| Agent | Prime Agent 0.9.3 (RLM) over JSON-lines RPC | ADR-005 compute-not-assert | LLM API, LiteLLM stub |
-| DB/API | Postgres 16 + FastAPI + WS (NOTIFY) | [Verified] `api/` | SQLite, Django |
-| UI | React + Vite + Tailwind | [Verified] `ui/` | static HTML |
-| Contracts | Pydantic v2 + exported JSON Schema | docs/06 | Zod |
-| Infra | Compose local; Terraform ×3 validate-only | ADR-004 $0 | live cloud |
-| Quality | pytest (+Postgres), ruff, mypy strict (pipelines/agent/api), npm test, Actions | [Verified] workflows | pre-commit |
-
-Trade-offs accepted in order: perf; AGPL; care needed; demo-scale; private package; one DB user; thin tests; strict churn; no ops evidence; untyped scripts.
-
-**E.1 ★** Python for the CV ecosystem and one language across planes; the deterministic core is plain Python + NumPy so it can be re-derived by hand. Go/Rust would buy throughput at the cost of the detector ecosystem. [Inferred].
-
-**E.3 ★ Load-bearing:** Ultralytics, torch, Pydantic (every contract incl. gate inputs), FastAPI/asyncpg, redis (queue + reclaim), `av`, Shapely. Risky: torch+ultralytics (multi-GB, AGPL); `prime-agent` (not on public npm — the agent container builds from a vendored tarball; CI verifies the adapter by replaying a golden session, not the live CLI) [Verified] `docker/vendor/README.md`.
-
-**E.5b ★ Drift.** `uv.lock` + `package-lock.json` committed; CI `uv sync --frozen || uv sync`; torch pinned exact. Committed results record **no** package or model versions (transcript fixture names `z-ai/glm-5.3-flash`), so fresh-resolve reproducibility cannot be shown; no resolve attempted (run brief). [Verified]; [Inferred] risk.
-
-Improvement records: W-STACK-1.
-
----
-
-## 7. Architecture: diagrams, execution walkthrough, ADR table (F)
-
-**F.1 ★ Style.** Event pipeline + client–server delivery: per-camera streaming workers → Redis Streams → single-consumer verification worker → Postgres → FastAPI/WS → React, organized as the two-plane split with a deterministic gate between (ADR-001). **F.2 ★ Components.** Vision worker per camera (detect, track, project, rules, evidence); Redis Streams broker; agent worker (queue → Prime Agent RPC → schema validation → Band-3 → persistence); shared evidence volume; Postgres + NOTIFY; FastAPI; React dashboard; replay/showcase scripts. [Verified].
-
-```mermaid
-flowchart TD
-    CAM["MediaMTX - looped clips as RTSP"]
-    CFG["config YAML + calibration JSON"]
-    subgraph FP["Fast plane - deterministic, every frame"]
-        VIS["pipeline.py - YOLO11s + ByteTrack + Kalman"]
-        GEO["geometry - homography px to m + zones"]
-        RULE["rules.py RuleEngine"]
-        EV["evidence.py window capture"]
-    end
-    REDIS[("Redis Streams - tracklets + trigger_events")]
-    VOL[("Workspace volume - incidents")]
-    subgraph SP["Slow plane - only on trigger"]
-        WORK["worker.py AgentWorker"]
-        PA["prime_adapter.py - Prime Agent RLM"]
-        GATE["band3.py gate"]
-    end
-    PG[("Postgres - incidents, reviews, agent_runs")]
-    API["api/main.py FastAPI + WS"]
-    UI["ui/ React dashboard"]
-    REPLAY["replay_demo.py + showcase recorder"]
-    CAM --> VIS
-    CFG --> VIS
-    CFG --> RULE
-    VIS --> GEO --> RULE
-    VIS --> REDIS
-    RULE -->|TriggerEvent| REDIS
-    RULE --> EV --> VOL
-    REDIS --> WORK --> PA --> GATE
-    VOL --> WORK
-    GATE --> PG
-    PG --> API --> UI
-    REPLAY -.->|same write path| PG
+```
+sitework-ai/
+  pipelines/   vision (detector, pipeline, rules, evidence), geometry (calibration), broker (Redis), schemas
+  agent/       worker, prime_adapter, band3 (the gate), prompts
+  api/         FastAPI service and Postgres schema
+  ui/          React dashboard and the recorded demo data
+  config/      cameras, zones, rules, calibration files
+  evaluation/  benchmarks, tracking eval, the 30 fixtures
+  scripts/     replay demo, showcase agent, smoke test, docs check
+  docker/      compose files and Dockerfiles (MediaMTX replays the clips as RTSP streams)
+  deploy/      Terraform for AWS, GCP, Azure (validated, never applied)
+  docs/        design suite, ADRs, spikes, results
+  tests/       26 test files, 191 tests
 ```
 
-**F.3 ★ One incident end to end** (dock demo). MediaMTX loops the clip → `pipeline.py run_stream` decodes (`av`), `build_tracks` runs detector + ByteTrack + Kalman + motion compensation → `Homography.apply` projects box bottom-centers to meters → `RuleEngine.process` emits a `TriggerEvent` when `exclusion_mobile_plant_dock` holds (4.20 m) → `EvidenceCapture` writes the ±5 s window → `worker.py _handle` pops the entry; `process_one` stages files; `build_prompt` inserts the rule definition → `PrimeAdapter.prompt` runs `prime-agent --mode rpc` (≤210 s) → `KinematicsVerdict` validation → `band3.check` recomputes 4.20 m → `IncidentRecord(confirmed, normal_ops)` → `PostgresPersister.persist` → `incidents_notify` → `/live/ws` push → dashboard. Outcome [Verified, L1] `incidents.json`.
-
-```mermaid
-sequenceDiagram
-    participant VP as pipeline.run_stream
-    participant RE as RuleEngine.process
-    participant AG as AgentWorker.process_one
-    participant PA as PrimeAdapter.prompt
-    participant G3 as band3.check
-    participant DB as PostgresPersister
-    participant UI as Dashboard via /live/ws
-    VP->>RE: TrackletFrame every 0.1 s
-    RE-->>VP: TriggerEvent when rule holds
-    VP->>AG: trigger on Redis stream, evidence written
-    AG->>PA: build_prompt with rule definition
-    PA-->>AG: result.json KinematicsVerdict
-    AG->>G3: check event vs verdict vs tracks.jsonl
-    G3-->>AG: passed or mismatch reasons
-    AG->>DB: IncidentRecord confirmed or needs_review
-    DB-->>UI: NOTIFY then WebSocket push
-```
-
-**F.8 ★ Contracts.** `pipelines/schemas/models.py` (`TrackletFrame`, `TriggerEvent`, `KinematicsVerdict`, `IncidentRecord`, `CalibrationQuality`, `AgentRunStats`; `extra="forbid"`), JSON Schemas exported with a CI freshness check, config YAML validated at load, `api/schema.sql`; gate tolerances in docs/06 §3 and code constants (`DISTANCE_TOL_M=0.15`, `VELOCITY_TOL_MPS=0.2`, `TIME_TOL_S=0.2`, `RELATIVE_TOL=0.05`) [Verified].
-
-**F.11 ★ Invariants** (static; adversarial probes skipped — this run executes nothing, §27): (1) metric rules never fire on untrustworthy calibration (`rules.py:174,259`); (2) nothing reaches `confirmed` without schema + gate pass (`worker.py:232-259`); (3) nothing silently dropped — no ack on crash/persist failure (`worker.py:172-187`); (4) plane crossings schema-typed. Attacks from reading: (2) holds with designed gaps (speed ungated, `ttc_s` unchecked — W-AI-1); (3) holds at the cost of at-least-once reprocessing (idempotent upsert); one latent defect in the two "minimum distance" spans (W-ARCH-1) [Verified]; reachability [Inferred].
-
-**F.19 ★ Scale.** 10× streams: one-GPU-per-camera plus laptop thermal throttling break first — sustained-load numbers show 3× per-stream FPS loss from heat alone [Documented]. 100×: single agent worker (~1 incident/minute) and single Postgres queue up [Inferred]. 1000×: shared-volume evidence storage dominates [Inferred].
-
-**F.22 ★ SPOF.** The agent worker (one consumer, one prime-agent process per incident, no fallback): if it or the provider is down, triggers pile up in Redis and nothing is confirmed — fail-safe but silent. Postgres is a second SPOF. [Verified].
-
-**F.24 ★ ADR table** (repo ADRs 001–005):
-
-| # | Decision | Evidence | Alternatives | Gained | Sacrificed | Reversible · right? |
-|---|---|---|---|---|---|---|
-| 1 | fast/slow planes + gate | ADR-001 | pure rules; pure LLM | determinism where it matters | two code paths | yes · yes |
-| 2 | Redis Streams local | ADR-002 | Kafka, SQS | zero ops | durability | yes · yes |
-| 3 | YOLO11s default, proxy classes | ADR-003, spikes | 11n, RT-DETR | free 1080p speed | forklift class | yes · yes |
-| 4 | cloud = validated Terraform only | ADR-004 | live deployment | reproducible IaC | no ops evidence | yes · yes |
-| 5 | Prime Agent embedded, pinned, external timeout | ADR-005, spike-01 | LiteLLM stub | the core demo | reproducibility | partly · yes |
-
-Improvement records: W-ARCH-1.
-
-Improvement records: W-ARCH-1.
-
----
-
-## 8. Data architecture (G)
-
-**G.1 ★** Enters: decoded frames (never stored) + config YAML. Transient: `TrackletFrame`s (~10 Hz/camera) through Redis Streams. Stored: per-incident evidence (`tracks.jsonl` + `clip.mp4`, ±5 s; demo incidents 37–86 KB JSON + ~1 MB clip), `IncidentRecord`/`reviews`/`agent_runs` in Postgres, showcase artifacts in `ui/public/showcase/`. Leaves: JSON over REST/WS, HTML shift reports. [Verified].
-
-**G.3 ★ Model.** `TrackletFrame{camera_id, frame_ts, seq, calibration_quality, tracks[]}`; `Track{track_id, cls, confidence, bbox_px, ground_point_m?, velocity_mps?, speed_mps?, state, zone_ids, ppe}`; `TriggerEvent{event_id, rule_id, severity_hint, metrics{min_distance_m,duration_s,closing_speed_mps}, involved_track_ids, evidence refs, cooldown_key}`; `KinematicsVerdict{verified_min_distance_m, closing_velocity_mps, ttc_s, classification, recompute_inputs}`; DB tables per `api/schema.sql`. Models `extra="forbid"`; inputs carry SHA-256 manifests; incidents upsert on `event_id`; no retention (disclosed `docs/06 §6`) [Verified].
-
-Improvement records: none above Low (retention in W-OPS-1).
-
----
-
-## 9. Algorithms and mathematics (H)
-
-The mathematical machinery in SiteWatch AI exists to answer one question honestly: **how far apart were they, really, in meters?** A camera reports pixels, and pixels are not meters. The core math converts picture coordinates into floor coordinates so a rule like "3 metres for 2 seconds" means three real metres, then re-derives the same numbers a second time behind the AI's back. The everyday analogy is standing at the end of a warehouse aisle: lines parallel in the real world squeeze toward one point on the horizon, objects whose feet sit lower in your view are closer, and if you know how high your eyes are above the floor, "how far below the horizon" becomes "how far away". That is exactly what the calibration math does; everything downstream — distances, speeds, dwell times, the gate — is ruler work on the floor positions it produces. [Verified] `pipelines/geometry/`, `rules.py`, `band3.py`.
-
-### Central method 1 — the floor mapping (homography from matched points)
-
-**Plain language.** Someone marks a few spots identifiable both in the picture and on the floor — "that floor joint crosses this pixel" — and the code learns the one conversion rule that sends *any* pixel to a floor position, absorbing the camera's tilt, zoom and perspective in a single 3×3 grid of numbers. Think of unwarping a tilted photo of a tiled floor: four recognisable tiles are enough to recover how the picture was squeezed.
-
-**Formal statement.** For matched points $(x_i, y_i)$ in the image (pixels) and $(u_i, v_i)$ on the floor (meters), find the 3×3 matrix $H$, unique up to an overall factor, such that $(u_i, v_i, 1)^T \sim H\,(x_i, y_i, 1)^T$, where "$\sim$" means "equal up to a common factor" and $T$ means "written as a column". Each match contributes two rows to a design matrix $A$: $(-x_i, -y_i, -1, 0, 0, 0, u_i x_i, u_i y_i, u_i)$ and $(0, 0, 0, -x_i, -y_i, -1, v_i x_i, v_i y_i, v_i)$; $H$'s entries are the right singular vector of $A$ for its smallest singular value (in plain terms: the single 9-number combination that best satisfies all the matches at once), reshaped into a 3×3 grid and scaled so its bottom-right entry is 1. [Verified] `homography.py:37-47`, `homography.solve` (`homography.py:25`).
-
-**Worked example (illustrative round numbers, not a repo measurement).** If a camera looks straight down so the floor scales evenly at 100 pixels per metre with the origin at the image's bottom-left, then $H$ is just "$u = x/100$, $v = y/100$" and the pixel $(300, 450)$ lands at $(3.0\,\mathrm{m}, 4.5\,\mathrm{m})$ — checkable in your head. A tilted camera's skew and squeeze are recovered the same way from four or more matches.
-
-**Assumptions and limits.** At least 4 non-collinear matches on one flat floor. The solve skips the usual pre-scaling of coordinates (Hartley normalization), so conditioning on 1920-pixel coordinates is a real concern [Inferred]; and with exactly 4 points the fit is *exact*, so its residual `rms_px` is ≈0 — the 2.0 px quality gate (`homography.py:70`) only bites on over-determined picks (5+ points). [Verified].
-
-### Central method 2 — measuring from one photo and one honest guess (vanishing-point / level-camera metrology)
-
-**Plain language.** Often nobody surveyed the floor — the demo clips are stock footage. This method squeezes geometry out of the picture itself: world-parallel lines (floor joints, wall tops, window sills) converge in the image to one vanishing point, which tells the code where the horizon is and how the camera tilts. What the picture cannot give is *scale* — meters per pixel — so one real-world measurement is required: how high the camera sits. Given that one guess, every floor position becomes a distance in meters.
-
-**Formal statement.** For traced line segments $\ell_i$ assumed parallel in 3D, their vanishing point $v$ minimizes $\sum_i d(\ell_i, v)^2$, the summed squared distances from the point to the lines, solved by the same smallest-singular-value trick (`vanishing_point.py:46`). Focal length $f$ (pixels) follows from two perpendicular directions with vanishing points $v_1, v_2$ and image center $c$: $(v_1 - c)\cdot(v_2 - c) + f^2 = 0$ (`vanishing_point.py:72`). With camera height $h$ in meters — the single assumed measurement — the ground mapping is $H = [-h\,x_{axis};\; -h\,y_{axis};\; up]\,K^{-1}$, where $x_{axis}, y_{axis}, up$ are the camera's floor-aligned axes and $K$ is the intrinsics matrix built from $f$ and $c$ (`level_camera.py:54-85`). [Verified]. The three-vanishing-point form is adapted (`vanishing_point.py`); the one-point "level camera" special case for a view straight down an aisle is adapted (`level_camera.py:54`).
-
-**Worked example (real, from the dock calibration).** 11 traced aisle lines converge on the vanishing point $(975.15, 512.29)$ px with residual RMS 1.21 px, passing the 2.0 px gate. For scale: the forklift's 0.98 m rear wheel track spans 225 px at a contact row 307 px below the horizon, giving $h \approx 0.98 \times 307 / 225 \approx 1.34$ m; a 1.70–1.75 m worker gives 1.46–1.50 m; the file takes $h = 1.40$ m between them. Head-check of the depth rule: at $f = 3500$ px, a floor point 350 px below the horizon is $1.40 \times 3500 / 350 = 14$ m away (illustrative round numbers). Assumptions recorded verbatim in `config/calibration/dock_north_01.json` [Verified].
-
-**Assumptions and limits.** Pinhole camera, genuinely parallel lines, zero roll, and a trustworthy $h$; focal length is assumed (3500 px; the file notes a plausible 3000–4400 px range, affecting only depth-axis distances). Crucially, the 1.21 px quality number measures only how consistently the traced lines agree on *one* vanishing point — not scale accuracy — so every distance carries the ±8% uncertainty of the height estimate (W-MATH-1; `level_camera.py:22-27` says the same).
-
-### Central method 3 — the tape measure the AI may not argue with (shared distance math)
-
-**Plain language.** Once floor positions exist, "how close did the forklift get" is ordinary ruler work, done twice by design: the rule engine computes it to decide whether an alert fires, and the gate computes it again from stored raw data to check what the fast plane claimed and what the AI answered. Closest approach is the smallest per-frame distance; closing speed is how fast that distance shrank before the closest point; zone dwell is how long someone stayed inside a drawn area without stepping out.
-
-**Formal statement.** For floor positions $(x_a, y_a)$ and $(x_b, y_b)$, the per-frame distance is $d_t = \sqrt{(x_a - x_b)^2 + (y_a - y_b)^2}$; the claim is $d_{min} = \min_t d_t$; closing velocity is $(d_{t-1} - d_t)/\Delta t$ evaluated at the min-distance frame; dwell is $t_{last} - t_{entered}$ for the unbroken run of in-zone frames ending at the trigger (`rules.py:165-248`, `band3.py:67-125`). [Verified].
-
-**Worked example.** One track at $(0, 0)$, another at $(3, 4)$: by the 3-4-5 triangle they are 5 m apart. One second later the second track is at $(0, 3)$: 3 m apart, so over that second they closed at $(5 - 3)/1 = 2$ m/s and the closest approach so far is 3 m.
-
-**Assumptions and limits.** A flat floor and trustworthy ground points; the gate compares claims within 0.15 m / 0.2 m/s / 5% (0.2 s for dwell; `pipelines/schemas/models.py`). Two limits are visible in the code: speed verdicts are never recomputed (W-AI-1, `band3.py:16-19`), and the gate takes its minimum over the whole stored window while the rule engine's claim covers only the current approach — an earlier dip in the window can force a false `needs_review` (W-ARCH-1, `band3.py:79-92` vs `rules.py:207-221`).
-
-### The rest of the pipeline's mathematics
-
-**H.1 ★ Inventory.** Everything else is standard machinery, either a library call or a small adaptation; the table gives one plain-language clause each, and marks the central methods above — they decide what "3.0 m" means and what the gate checks (central vs incidental, H.3).
-
-| Method | Where | Kind | What it does, in plain words |
-| --- | --- | --- | --- |
-| Planar homography DLT+SVD | `homography.py:25` | standard | the floor mapping of method 1 (central) |
-| Vanishing point from ≥2 lines | `vanishing_point.py:46` | standard | finds where world-parallel lines converge in the picture (central) |
-| Focal length from orthogonal VPs | `vanishing_point.py:72` | standard | recovers lens zoom from two perpendicular directions |
-| Ground homography from 3 VPs + assumed height | `vanishing_point.py` | adapted | method 2's general case when two horizon directions are visible |
-| Level-camera homography | `level_camera.py:54` | adapted | method 2's one-point case for a view down an aisle (central) |
-| ORB+RANSAC motion compensation | `motion.py` | library | realigns each handheld frame onto the calibrated frame |
-| ByteTrack + Kalman + 1 s velocity window | `kalman.py`, `pipeline.py` | standard | keeps one identity per person/vehicle, smooths jittery speeds |
-| Pairwise distance, closing speed, dwell, TTC | `rules.py:165-248`, `band3.py:67-125` | standard | method 3's shared tape measure (central) |
-| RMS reprojection gate (2.0 px) | `homography.py:70` | adapted | quality gate deciding whether metric rules may run |
-| MOTA/IDF1 | `eval_tracking.py` | library | standard tracking-accuracy scores |
-
-Methods 1–3 are written from scratch on NumPy SVD; tracking (ByteTrack via Ultralytics), image alignment (ORB+RANSAC) and the tracking scores (`motmetrics`) are library calls, with the Kalman smoother as the project's own module (`kalman.py`) [Verified]. Each solve is one tiny SVD — negligible next to video decoding, where the compute bottleneck lives (§14).
-
-**H.17 ★ Assumptions (whole chain).** Pinhole camera, planar floor, zero roll, known camera height. Failures are documented: handheld drift up to 65 px is compensated frame by frame (`motion.py`), lens distortion is unmodelled, and a wrong height scales every distance proportionally. Degradation is safe: a calibration failing the 2.0 px gate keeps zone detection but switches metric distance and speed rules off rather than report untrustworthy meters (`rules.py:174,259`). [Verified]/[Documented].
-
-Improvement records: W-MATH-1; Low: W-DOM-1.
-
----
-
-## 10. AI/ML and agent architecture (I)
-
-**I.1 ★ Hybrid.** Deterministic: fast plane + Band-3 gate. Probabilistic: one LLM (Prime Agent RLM) classifying already-fired events. Boundary: schema-validated `TriggerEvent` + tracking window; raw video never crosses. [Verified].
-
-**I.2 ★ Model calls.**
-
-| Call site | Model | Where | Task | In → out | Tokens | Latency | Cost | Fallback |
-|---|---|---|---|---|---|---|---|---|
-| `prime_adapter.py:167` | prime-agent 0.9.3 RPC; transcript shows `z-ai/glm-5.3-flash` | provider API (`~/.prime`) | verify one incident | prompt + `tracks.jsonl` → `result.json` | runs 10.6–62.6 K; eval 43.5–56.2 K [Documented] | p50 68.8 s | ~$0.002 | none — timeout/crash → `needs_review` |
-| `detector.py` | YOLO11s | local GPU | detection | frame → boxes | n/a | 9–21 ms | $0 | none |
-
-**I.8 ★ Output control.** Only `result.json` is consumed; `KinematicsVerdict` validation (`extra="forbid"`) is the acceptance test; missing/invalid output, timeout (210 s supervisory kill — spike-01 proved the CLI's caps untrustworthy) or crash → `needs_review` with reason. [Verified] `worker.py:224-246`.
-
-**I.9 ★ Gates.** Band-3: proximity — recompute min distance over the stored window; reject if the fast plane's `metrics.min_distance_m` **or** the agent's `verified_min_distance_m` differs by >0.15 m/5%; compare agent closing velocity (>0.2 m/s/5%). Zone — recompute continuous dwell at trigger; reject `violation` without the limit met or `false_positive` with it met (0.2 s). Pass-through on schema alone: speed triggers, `ttc_s`, `duration_s`, `normal_ops`/`near_miss` judgment classes (rationale in the module docstring). The demo shows the gate rejecting an agent `false_positive` with a quoted 3.00 s recompute (`earlier_runs.json`) [Verified, L1].
-
-**I.18 ★ AI value.** The essential AI feature is narrow: classifying fired events with context rules lack. A rules-only classifier would likely score similarly — the proximity prompt's cutoffs (<2.0 m near-miss, <1.0 m violation) are deterministic thresholds — and the repo never measures the difference (W-EVAL-1). Current standing: the AI demonstrates *checked* probabilistic judgment, not a measured accuracy upgrade. [Verified] prompts; [Inferred] rest.
-
-Improvement records: W-AI-1, W-EVAL-1.
-
----
-
-## 11. Evaluation, results and claims audit (J)
-
-**J.1 ★ Claims audit** (L1 = doc matches committed artifact; nothing re-run, so no L2):
-
-| ID | Claim (source) | Checked against | Verdict |
-|---|---|---|---|
-| CL-01 | 191 tests (164+27) + 6 UI (README) | 184 `def test_` counted, not executed | Partial (L1) |
-| CL-02 | YOLO11s 35.0 FPS 1080p (README) | `benchmarks.md` 35.0 + raw JSONL | Supported (L1) |
-| CL-03 | 3×30.2 FPS rested, 9.5–13.2 sustained (README) | M5 tables + raw JSONL | Supported (L1) |
-| CL-04 | agent 86.7% first-pass; 100% after timeout fix (README) | report 26/30 ✓; "100%" = 4-fixture retest + extrapolation (disclosed) | Partial (L1) |
-| CL-05 | 82.1% agreement (README) | report 23/28 ✓ | Supported (L1) |
-| CL-06 | median verification 68.8 s (README) | report `p50_wall_s` ✓ | Supported (L1) |
-| CL-07 | ~43–56 K tokens, ~$0.002/incident (README) | `docs/10` band; demo records 10.6–62.6 K | Partial (L1, §24 D-2) |
-| CL-08 | MOTA 0.16–0.46 MOT17 (README) | 0.158–0.459 + raw JSONL | Supported (L1) |
-| CL-09 | Terraform validated ×3, never applied (README) | `iac-check.yaml`, ADR-004 | Supported (L1) |
-| CL-10 | demo: dock 4.20 m → normal_ops; aisle 3.0 s → violation (README) | `incidents.json` 4.2028894 m ✓, `confirmed` ✓ | Supported (L1) |
-| CL-11 | gate caught the agent's false_positive (README) | `earlier_runs.json` reason + transcript ✓ | Supported (L1) |
-| CL-12 | live demo works today (README) | `pages.yaml` + green `pages` runs [Measured] | Supported (deploy); liveness [Unknown] |
-| CL-13 | dock calibration 1.21 px passes gate (README) | `dock_north_01.json` ✓ | Supported (L1) |
-| CL-14 | S2 met ≥25 FPS ×3 (PLAN.md) | both benchmark matrices ✓ | Supported (conditional on GPU state) |
-| CL-15 | ±8% distance uncertainty (README) | calibration JSON assumptions — estimates | Supported as estimate |
-
-**J.2 ★ Harness.** `evaluation/agent_eval.py` (30 hand-built fixtures through the real `AgentWorker.process_one` against the real CLI), `benchmark_models.py` (FPS/latency/VRAM + thermal snapshots), `eval_tracking.py` (MOTA/IDF1 vs MOTChallenge GT, 200-frame caps); `make` targets; method in `docs/09` [Verified]. **J.3 ★ Numbers:** in the CL table; all carry n and raw artifacts; none carry confidence intervals; the repo keeps raw 86.7% beside adjusted 100% and throttled FPS beside best case [Documented]. **J.4 ★ Baselines:** tracking is self-described "baseline, not a claim"; detection compares 11n vs 11s only; agent verification has **no deterministic baseline** — nothing measures what the slow plane adds over recording the trigger's own numbers (W-EVAL-1) [Verified]. **J.12 ★ Pre-registration:** not claimed; spikes precede decisions (spike-00 → YOLO11s, spike-01 → timeout). n/a. **J.13 ★ Leakage:** the fixture set was hand-built alongside the prompts and carries a self-caught labeling error (`docs/eval-m5`), so classification agreement is an upper bound for real footage [Documented].
-
----
-
-## 12. Testing and code quality (K)
-
-**K.1 ★** 26 Python test files: unit (geometry, schemas, rules, kalman, config), Postgres integration (`integration` marker, CI service container), a golden-session contract test (replays `tests/fixtures/golden_prime_agent_session.jsonl` through `PrimeAdapter` against `tests/_fake_prime_agent.py`), behavioral worker/gate tests; 184 test definitions counted [Verified] (191 collected [Documented]). 6 UI unit tests, no component/e2e (disclosed).
-
-**K.2 ★** Not run (run brief). CI: ruff, mypy (strict; `pipelines`/`agent`/`api` only), pytest+Postgres, `check_docs.py`, schema-export diff; latest runs green [Measured] `gh run list`. **K.4 ★** README's "ruff, mypy, UI type-check and build clean, all green in CI" matches the workflows item for item; no claim exceeds CI. `evaluation/`, `scripts/`, `tests/` are outside mypy scope [Verified].
-
-**K.6 ★ Spot-checks (AI-written tests).** `test_band3.py::test_zone_dwell_recompute_counts_the_run_ending_at_the_trigger` asserts an exact 2.0 s recompute over a hand-set frame pattern — behavior, not implementation; `…::test_zone_gate_tolerates_float_dwell_just_under_the_limit` encodes the real showcase float-epoch edge case; `test_worker.py` asserts the prompt carries the rule definition — pins the M7 fix. All test real behavior. [Verified].
-
-**K.10 ★ Missing.** Invented test: a pair that dips inside the radius briefly, exits, re-enters and triggers — per W-ARCH-1 expected to produce a false `needs_review`. Also untested: oversized windows, out-of-order `frame_ts`, `track_id` reuse. [Inferred].
-
-Improvement records: Low: W-TEST-1.
-
----
-
-## 13. Security, privacy and compliance (L)
-
-**L.1 ★** Assets: telemetry, incident records, LLM credentials (`~/.prime` mount), the agent's code-execution ability. `docs/08` holds a STRIDE-lite threat model whose 2026-09-26 review marks each control implemented/partial — most container hardening is **design only** [Verified].
-
-**L.2 ★ Surfaces.** Free-string fields (`rule_id`, `cls`) reaching prompt context; model output (`result.json`, schema-gated); the agent's REPL (arbitrary Python in a container); evidence paths (mitigated: `event_id` regex-validated before filesystem use); unauthenticated REST/WS if `BIND_ADDR=0.0.0.0` is opted into [Verified].
-
-**L.5 ★ Secrets.** Provider keys in `~/.prime`, `.env` ignored, compose carries a disclosed dev DB password. Tracked-file scan + history pickaxe for key patterns found no committed secrets (matches: `task-sg` names, an `sk-REDACTED` placeholder, npm URLs) [Measured].
-
-**L.13 ★ Review first.** (1) agent container: `cap_drop`, read-only rootfs, egress allowlist (designed, absent); (2) prompt-injection handling + red-team fixtures (none — disclosed `docs/11` R9); (3) anything beyond localhost binding needs authentication first. [Verified].
-
-Improvement records: W-SEC-1.
-
----
-
-## 14. Performance, reliability, deployment, operations, cost (M)
-
-**M.1 ★** Dominant: video decode (4K bottleneck; 1080p transcodes fix it), GPU inference (9–21 ms/frame), per-incident agent wall time (40–110 s, p50 68.8 s). Measurements are the repo's matrices with thermal snapshots and raw JSONL [Documented].
-
-**M.9 ★** Local Docker Compose (full stack: GPU + manual downloads; replay stack: Docker only). Hosted: the static Pages demo only; cloud Terraform validated, never applied (ADR-004). `pages` runs succeed [Measured]; page liveness [Unknown].
-
-**M.16 ★ Cost.** Local $0 infra + ~$0.002/incident LLM (measured band `docs/10 §2`; demo incidents ~$0.004 to record). Scales with incidents, not video: Scenario B (10 sites × 200 incidents/day) ~$70–170/mo, dominated by always-on managed DB/broker floors (~$20–80) and LLM (~$20–60) [Documented, repo-tagged directional]. Latent risk: no per-day budget alarm (disclosed).
-
-Improvement records: W-OPS-1.
-
----
-
-## 15. Alternatives and trade-offs (N)
-
-**N.1 ★** Two fundamentally different builds: rules-only CV product (cheap, deterministic, drowns users in false alarms — the README's named failure mode) and pure-LLM video analysis (contextual but slow, costly, confidently wrong). The hybrid is right for a portfolio goal because the *verification architecture* is the point. A third option — CV + rules + deterministic kinematics classifier, no LLM — likely delivers the same fixture accuracy (W-EVAL-1). [Inferred].
-
-**N.2 ★ 80% version.** Fast plane + rules + deterministic classification + Postgres/API, no agent or gate. The current build adds them; justified only as a demonstration of checked probabilistic judgment, which is the stated purpose [Documented] README — so justified, but its accuracy value is unproven (W-EVAL-1).
-
-**N.12 ★ Biggest design weakness, plainly.** The metric layer rests on hand-estimated calibration (camera height from a forklift's wheel track; focal length "a typical lens") with a gate that measures only geometric consistency, while numbers are presented to 0.01 m — precision the ±8%+ scale uncertainty does not support (W-MATH-1). [Verified].
-
-Improvement records: none new.
-
----
-
-## 16. Development history and timeline (O)
-
-**O.1 ★** 2026-09-15 plan/concept + MIT license (Gemini-aided ideation artifact) → M0 scaffold + CI; dataset manifests → M1 perception + spike-00 (YOLO11s default; weights uncommitted `e323417`) → spike-02 forklift-class decision (proxies ship) → M2 geometry/rules/evidence/broker with honest real-calibration failures → M3 spike-01 → Prime Agent adapter + 10-incident eval → M4 Postgres/API/dashboard → M5 30-incident eval + benchmark matrices + MOT17 → M6 Terraform ×3, runbooks, cost model, replay mode, two geometry bug hunts (`4916a2`… see `51e6b47`) → post-M6 doc review fixing undisclosed design/build gaps (`b741a11`) → M7 showcase recorder, demo-camera calibration, five real bugs fixed with tests, hosted demo → `defe1b8` binds ports to localhost. [Verified] `git log`, `docs/12`. Shape: 54 commits in 12 days, milestone batches, negative-result commits kept (`c7f64f6`, `098e0a4`); no squashing evidence [Inferred].
-
-Improvement records: none.
-
----
-
-## 17. How it was built: human + AI collaboration (P)
-
-**P.1 ★** 42/54 commits carry `Co-Authored-By: Claude Sonnet 5` (37) or `Claude Opus 5.5` (5) [Verified]; Gemini in the ideation conversation `project_concepts_ideas.md` [Verified]; README credits Claude Code and says Prime Agent is a runtime component, not the builder [Documented]. [Author] "mostly I used the same tool across an entire project with limited exceptions" (Q4 ANSWER), and the build tools named are "Mostly Claude Code but also Github Copilot, Codex, Prime-Agent" (Q3) — the latter leaves no commit-trailer trace and is in tension with the README line above (§26 flag). Per-phase split beyond that: [Unknown].
-
-**P.2 ★** Share: [Author] "Very little code written by Author … all development work done by LLMs and agents. Mostly Claude Code but also Github Copilot, Codex, Prime-Agent with a variety of LLMs" (`AUTHOR_CONTEXT.md` Q3 ANSWER) — this **confirms** the previously ⚠ "agents wrote most of the code under Chris's direction" line. Per-repo split, per-phase tool mix and architecture share remain [Unknown] (§26).
-
-**P.3 ★** Author decisions evidenced by judgment artifacts: keep cloud validate-only (ADR-004); publish throttled numbers beside best case; keep the mislabeled fixture unfixed to avoid moving goalposts (`docs/eval-m5`); scope to one agent role and document the unbuilt design (`docs/05`). Per-line attribution: not done [Unknown] → §26.
-
-**P.7 ★** No instruction files tracked. Functional equivalents: the doc suite (docs/01–13), PLAN.md, and `scripts/check_docs.py` — a machine-checked consistency gate over the docs [Verified].
-
-**P.12 ★** Verification before acceptance, evidenced: CI gates, spike-driven decisions, golden-session contract replay of the real agent's RPC, honest calibration attempts, M7 bug hunts fixed with tests, recurring `docs: align doc suite with reality` commits [Verified].
-
-**P.13 ★** Evidenced product/agent failures (attribution only where the repo says so): the agent misclassified a real intrusion — transcripts showed why (prompt lacked the rule definition) [Documented] `docs/12` M7; prime-agent's turn caps failed to stop a runaway (spike-01 Finding 4); the RPC pipe garbled UTF-8 on Windows. Defects this review found are defects, not proven agent mistakes. **P.19 ★** Explains unaided: two-plane design, gate, rule engine, calibration derivations. Would need re-study: prime-agent internals, ByteTrack behavior, Terraform details [Inferred].
-
-**P.26–P.27 ★ Gates.** No gate framework (`gates.yaml` absent); approval identity is the single committer "Chris Schmidt" on all 54 commits [Verified]. Whether agent-authored changes were accepted under that name without separate review is inherent in the model and [Unknown]; no gate was "marked passed" (n/a).
-
-Improvement records: W-PROC-1 (Low).
-
----
-
-## 18. Product and research potential (Q)
-
-[Inferred throughout] Value: automatic auditable safety records; time saved unquantified (no user study). Competitors: commercial VMS analytics and DIY OpenCV+YOLO stacks; differentiator is the checked-claim architecture and honest evaluation. Revenue: licensing to VMS integrators; blockers: AGPL detector, no alarm path, no auth. Not research (`[RESEARCH]` skipped): engineering with a measurement appendix.
-
----
-
-## 19. Limitations, technical debt and roadmap (R)
-
-**R.1 ★** Repo-listed limits (README "Limitations"): simulated inputs; estimated calibrations (±8%+); no genuine close call in the footage (the 5 m rule is a demo choice); COCO blind spots; nondeterministic agent, partially gated; no alarm output; prime-agent not publicly installable; recorded (not live) overlay; local-demo security only; thin UI tests; single dev GPU. [Documented].
-
-**R.2 ★** Incomplete/persisting: S3 unmeasured; fresh clone can't run the full stack; `frame.ticker`, PPE, shift synthesizer, watchdog unbuilt; no retention; no red-team fixtures. Defects persisting per this review: W-ARCH-1 (latent), W-CODE-1 (stale docstring). [Verified]/[Documented].
-
-**R.9 ★ Next three phases** [Proposed]: 1. *Trust hardening* — gate speed/duration recompute, store the rule-condition span in `TriggerEvent`, red-team fixtures (exit: W-ARCH-1/W-AI-1 verified fixed). 2. *Evidence of value* — deterministic baseline + real-footage false-alarm study with CIs (exit: W-EVAL-1 answered). 3. *Product edges* — alarm consumer with measured alert latency, auth, retention (exit: alert < 5 s demonstrated). Extra budget: real-site pilot, surveyed calibration.
-
-Improvement records: none new.
-
----
-
-## 20. Shortcomings and Improvement Register (W, 0.7)
-
-Areas B–R probed with Part W's common probes. Full records for Medium+; Low in the table. Nothing is claimed as an agent mistake (P.13 rule).
-
-**W-ARCH-1 — Band-3 proximity recompute spans the wrong interval.** The gate recomputes min distance over the whole ±5 s window (`band3.py:79-92`) while `TriggerEvent.metrics.min_distance_m` is the min over only the current sub-radius state (`rules.py:207-221`), so an earlier approach in the 5 s pre-window makes the recompute strictly smaller and the fast plane's claim fails tolerance — a deterministic false `needs_review`. Evidence: `evidence.py` `DEFAULT_PRE_WINDOW_S=5.0` vs state deletion on leaving radius [Verified]; hand-traced scenario (dip t−4 s, re-entry t−1 s, trigger t). Impact: misleading "mismatch" reasons erode trust in the gate; fail-safe. **Medium; undisclosed.** Options: (a) store condition start time in `TriggerEvent`, recompute over `[started_ts, trigger_ts]` (S/High, reversible); (b) compare agent claim vs trigger claim (S/Medium, keeps two truths); (c) accept/document (S/Low). Recommend (a). Verify: fixture with an earlier dip asserting `confirmed` + span unit test.
-
-**W-AI-1 — the gate covers only part of the agent's output.** Speed triggers pass on schema validation alone; `ttc_s` and the fast plane's `duration_s` are never cross-checked; `normal_ops`/`near_miss` are ungated judgment classes (`band3.py:16-19,161-164`) [Verified]; README discloses it. Impact: a plausible wrong judgment between allowed classes is stored as `confirmed` — the failure the design promises to prevent. **Medium; disclosed, not fixed.** Options: (a) recompute speed from the window, gate `ttc_s` arithmetically (M/High, reversible); (b) restrict speed/zone verdicts to `violation`/`false_positive` (S/Medium, loses nuance); (c) accept/document. Recommend (a), keep judgment classes but flag them. Verify: fixtures where the agent's speed claim contradicts the window.
-
-**W-EVAL-1 — the slow plane's value is never measured.** The agent eval is 30 hand-built synthetic fixtures vs hand labels: no deterministic-baseline comparison, no CIs, no real-footage set; the 150→210 s timeout change rests on one 4-fixture retest (`docs/eval-m5` caveats) [Verified] `eval-m5-report.json`. Impact: "AI verification adds judgment" is undemonstrated vs just recording the trigger's numbers — an AI hiring manager's first question. **Medium-High; partially disclosed.** Options: (a) rules-only baseline + bootstrap CIs on the same fixtures (M/High); (b) real-footage false-alarm study, blind labels (L/High); (c) accept/document (Low). Recommend (a) first. Verify: baseline vs agent table with CIs.
-
-**W-MATH-1 — the calibration gate measures fit, not accuracy.** `valid = rms_px ≤ 2.0` gates metric rules, but for `level_camera`/`vanishing_point` the RMS is a line-fit residual while scale comes from assumed height/focal (±8%+ on every distance), and incident numbers show 0.01 m precision [Verified] `level_camera.py:22-27`, `dock_north_01.json`; README discloses ±8%. Impact: "5 m" silently means 4.6–5.4 m. **Medium; assumption disclosed, precision mismatch not.** Options: (a) propagate scale uncertainty, report "4.2 ±0.3 m" (M/High); (b) split `valid` into `geometry_valid` + `scale_verified` with per-flag degradation (M/High); (c) accept/document (Low). Recommend (a). Verify: calibration carrying ±% shown in an incident.
-
-**W-OPS-1 — no alarm path, no retention, no budget cap.** Rule firings reach a human only after the ~1-minute agent step (no `trigger_events` consumer); evidence/DB rows never expire; nothing caps daily incident/LLM spend [Documented] README, `docs/02 §3`, `docs/06 §6`, `docs/10 §2`. Impact: in a safety product the alert is the deliverable; storage grows unbounded; a rule storm runs up spend. **Medium; disclosed, not fixed.** Options: (a) alarm consumer + TTL job + daily budget alarm (M/High); (b) alarm consumer only (S/Medium); (c) accept as portfolio-scope limit. Recommend (a) if work continues, (b) minimum. Verify: trigger→alert latency < 5 s; rule-storm cost test.
-
-**W-SEC-1 — agent sandbox and injection surface are design-only.** The agent container runs model-generated Python non-root but without `cap_drop`/read-only rootfs/egress allowlist; `rule_id`/`cls` are free strings entering prompts; `root_policy.md` is not injected; no red-team fixtures or dependency scanning; API unauthenticated [Verified] `docs/08 §2`, compose, `worker.py:84-131`. Impact: non-local deployment is exposed to prompt injection → arbitrary code in the agent container, plausible-wrong `confirmed` records. **Medium; mostly disclosed.** Options: (a) designed hardening + enum-constrained `cls`/`rule_id` + red-team fixtures (M/High); (b) stay strictly local and say so (S/accept); (c) provider-side sandbox review (M/Medium). Recommend (a) before any non-local run, (b) meanwhile. Verify: compose hardening check + injection fixtures.
-
-**Acceptable limits (documented; no action for this purpose):** simulated clip inputs; estimated demo calibrations disclosed in-product; Terraform never applied (ADR-004); single dev GPU; local-demo no-auth with localhost binding; thin UI tests; prime-agent private package with golden-session CI workaround.
-
-| ID | Shortcoming | Evidence | Suggested fix | Effort |
-| --- | --- | --- | --- | --- |
-| W-STACK-1 | AGPL Ultralytics/YOLO11 blocks commercial or hosted use without an enterprise license | README License, `yolo11-weights.yaml` | swap detector or license | M |
-| W-CODE-1 | `prime_adapter.py:3-5` calls the golden contract test "not yet built"; it exists and CI runs it | [Verified] | update docstring | S |
-| W-SCOPE-1 | PLAN.md S3 (LLM calls per 10-min clip) never measured | PLAN.md §3 | one counted 10-min run | S |
-| W-EVAL-2 | token/incident claims inconsistent (README 43–56 K vs demo records 10.6–11.9 K) | [Verified, L1] `incidents.json` | define token accounting; restate range | S |
-| W-DOM-1 | distances shown to 0.01 m with no uncertainty surfaced | `incidents.json`, UI | show ±% (folded into W-MATH-1) | S |
-| W-TEST-1 | 6 UI tests, no e2e, no prompt-injection fixtures | [Verified] `ui/src`, `tests/` | component + injection tests (folded into W-SEC-1) | M |
-| W-PROC-1 | no agent-instruction files or per-phase tool attribution | [Verified] tree, trailers | keep a build log per milestone | S |
-
-**W.16 Prioritization.** By value ÷ effort: (1) W-ARCH-1 (S; restores the gate's reason fidelity), (2) W-AI-1 speed/`ttc_s` gating (S–M; closes the loudest "AI unchecked" hole), (3) W-EVAL-1 baseline + CIs (M; makes the central claim evidenced). Conflicts: stricter gating raises `needs_review` volume, absorbed by W-OPS-1's alarm work — sequence them; a baseline showing the agent adds little is a result to publish, not suppress. Most hiring-manager impact: W-EVAL-1.
-
----
-
-## 21. Interview prep (S, T, V)
-
-**S.1 ★ Pitch.** 30 s: "SiteWatch AI is a warehouse-safety computer-vision system where an AI agent verifies each incident by computing from raw tracking data, and a plain-code gate re-checks the AI before anything is recorded — the recorded demo shows the gate catching the AI being wrong." 2 min: add the two-plane architecture, the measured numbers (35 FPS detection; 26/30 verification, all misses timeouts), the calibration story, and the M7 bug hunts.
-
-**S.2 ★ Titles.** Target titles are [Author] "AI Engineer, Forward Deployed AI Engineer" (`AUTHOR_CONTEXT.md` Q2 ANSWER); the repo maps onto both, and onto ML engineer (systems-flavored) as a fallback. **S.6 ★ Skills.** System design (two-plane split + contracts, ADRs); CV/geospatial engineering (homography family); evaluation discipline (published negative results); reliability (consumer groups, idempotent upsert, supervisory timeout); security awareness (threat model with per-control status). **S.8 ★ Ownership.** The repo checked its own claims against code (`b741a11`), kept negative results, refused goalpost-moving on a mislabeled fixture, fixed five demo-found bugs with tests — judgment artifacts, not prompt artifacts. **S.21 ★ Proves:** end-to-end ownership of a hybrid AI system where the AI is checked. **S.22 ★ Doesn't prove:** production on-call, scale beyond one GPU, real-site accuracy, unaided coding.
-
-**T-1 (6 challenges: question · answer · evidence · probe):**
-1. *Trace a feature* — the F.3 walkthrough; `worker.py:189-259`; probe: "where is evidence staged?" (`process_one`).
-2. *Key algorithm* — calibration: parallel scene lines meet at a vanishing point which with an assumed camera height fixes the floor mapping; `level_camera.py`; probe: "what does 2 px measure?" (line-fit consistency, W-MATH-1).
-3. *Storage choice* — Redis Streams over Kafka for local consumer-group semantics; ADR-002; probe: "where does it break?" (F.19).
-4. *Integrity risk* — W-ARCH-1's span mismatch; redelivery handled by idempotent upsert; probe: "two workers, one entry?" (300 s visibility timeout, `worker.py:55`).
-5. *Latency regression* — thermal throttling first (2–3× swings), then provider variance (same fixture 48–111 s); `docs/benchmarks.md`, `docs/eval-m5`.
-6. *Security weakness* — `BIND_ADDR=0.0.0.0` exposes an unauthenticated review API; fix: auth before any non-local bind + W-SEC-1.
-
-**T-2 rapid fire.** (1) No — geometry and gate are plain code; one LLM call per incident downstream. (2) Not a tutorial: three calibration methods, negative results, gate catches in the artifacts. (3) I directed scope, architecture and acceptance; §17 separates evidence from [Unknown]. (4) Every number has a committed raw artifact plus qualifiers — but nothing is L2-reproduced. (5) The LLM is off the decision path; worst case `needs_review`. (6) $0 infra + ~$0.002/incident; per-user undefined. (7) VMS analytics don't do checked-claim verification. (8) The yard camera — or the PDF. (9) `project_concepts_ideas.md`. (10) No external user evidenced. (11) Free strings reach prompts (W-SEC-1). (12) A day for the stack, a week for the math. (13) [Unknown]; last fixes `defe1b8`. (14) prime-agent: private package, external maintainer. (15) Nothing — no alarm path (W-OPS-1). (16) Design-only hardening, no auth, no SBOM. (17) Appears honest: negative results committed, self-caught gaps. (18) The thesis is architectural.
-
-**T-3.** "What does the agent add over rules?" → unmeasured; W-EVAL-1 is the plan. "What does the gate miss?" → speed/`ttc_s`/judgment classes (W-AI-1), span bug (W-ARCH-1). "Are your distances real meters?" → within ±8% from assumed camera height (W-MATH-1).
-
-## 22. Glossary
-
-**Band-3 gate** plain-code recomputation check on AI output · **ByteTrack** tracker linking detections across frames · **DLT** direct linear transform (the homography solve) · **homography** pixel→floor mapping for a plane · **MOTA/IDF1** MOTChallenge tracking scores · **needs_review** state the gate could not confirm · **RLM** Recursive Language Model: an LLM inside a live Python REPL · **RTSP** camera streaming protocol (faked here by MediaMTX) · **tracklet** short stretch of one tracked object · **TriggerEvent** packet emitted when a rule fires · **vanishing point** image point where parallel 3D lines meet.
-
-## 23. Evidence index
-
-Code (all at `defe1b8`): `pipelines/vision/{pipeline,rules,evidence,detector,kalman}.py`, `pipelines/geometry/{homography,vanishing_point,level_camera,motion}.py`, `pipelines/schemas/models.py`, `agent/{worker,prime_adapter,band3}.py`, `api/{main,schema.sql}`, `config/*.yaml`, `config/calibration/*.json`. Docs: README, PLAN.md, `docs/{01–13}`, `docs/benchmarks.md`, `docs/eval-m5-agent-slow-path.md`, `docs/spikes/*`, `docs/adr/*`, `docs/12-roadmap.md`, `data/manifests/*`. Artifacts: `evaluation/eval-m5-report.json`, `docs/*.jsonl`, `ui/public/showcase/{incidents.json,evidence/*}`. Commands (read-only): `git log`, `git ls-files`, `git grep`, `git log -S`, `gh repo view`, `gh run list`, file reads/counts, pattern scans. Not read in full: `docs/deployment/*`, `.tf` bodies, `ui/src` bodies, test bodies beyond spot-checks, `project_concepts_ideas.md` (first pages), `data/`, `weights/`, `runs/`, binaries — indexes/manifests only per run brief.
-
-## 24. Discrepancies: docs vs code
-
-- **D-1** `agent/prime_adapter.py:3-5` calls the golden-session contract test "not yet built"; `contract-agent.yaml` + `tests/test_contract_agent.py` exist and CI runs it. Code wins; docstring stale. [Verified]
-- **D-2** README "43–56 K tokens per incident" vs committed demo `agent_run` totals of 10.6 K and 11.9 K (an earlier run 62.6 K): the real spread is ~11–63 K; the README band reflects the M3 eval only. [Verified, L1]
-- **D-3** GitHub description: "…multi-agent operations platform…" while the build runs **one** agent role (`docs/05` as-built). The repo's docs disclose the narrowing; the description was not updated. [Measured] `gh repo view`.
-
-## 25. Risks found
-
-| Risk | Severity | Where |
-| --- | --- | --- |
-| Unauthenticated REST/WS if `BIND_ADDR=0.0.0.0` opted in | Medium (disclosed) | `docs/08`, `defe1b8` |
-| Agent sandbox + prompt-injection surface unhardened; no red-team tests | Medium | W-SEC-1 |
-| Ungated agent outputs stored as `confirmed` | Medium | W-AI-1 |
-| Gate span mismatch → false `needs_review` with misleading reasons | Medium (fail-safe) | W-ARCH-1 |
-| ±8%+ scale error on numbers presented to 0.01 m | Medium | W-MATH-1 |
-| No alarm / retention / daily-spend cap | Medium | W-OPS-1 |
-| Private `prime-agent` package; AGPL detector | Low–Medium | W-STACK-1 |
-
-## 26. Author Interview: open [Unknown]s
-
-**Author answers received 2026-10-18** (`AUTHOR_CONTEXT.md` "Questions for Chris" ANSWER lines — [Author]):
-- Role: "Machine Learning engineer with 5.5 years of experience" [Author]; target titles: "AI Engineer, Forward Deployed AI Engineer" [Author] — confirms the ⚠ career-goal line (AI/ML engineering roles), with the defense/intelligence slant ⚠ still drafter wording.
-- Code share: "Very little code written by Author … I asked all the initial questions and provided my preferences and feedback to generate each initial project scope, plan, approach, goals and objective, purpose, and architectural preferences but all development work done by LLMs and agents. Mostly Claude Code but also Github Copilot, Codex, Prime-Agent with a variety of LLMs" [Author] — confirms the ⚠ "agents wrote most of the code under Chris's direction" line.
-- Tool usage: "This can vary but mostly I used the same tool across an entire project with limited exceptions" [Author].
-- Understanding: "Varies. My level of understanding is growing and maturing with each project … each AI Engineering masters program course" [Author].
-- Motivation (intelligence/analysis apps): "I work in the defense sector and these topics are relevant and of interest to me" [Author]; whether anyone else uses them was **not** answered.
-- Publishing limits: nothing beyond "anything malicious, dangerous, of bad taste" [Author].
-
-Status: **CLOSED** — role/years and target titles (S.2, U-role items); agent-vs-hand code share (P.2, U.2 in outline); publish limits (U-adjacent). **Partially closed** — tool-per-phase (one main tool per project, but Sonnet 5 vs Opus 5.5 vs Copilot/Codex per phase still open); personal contribution (framing/scope/plan/approach/goals/purpose/architectural preferences named [Author], per-component detail open); motivation background (defense sector [Author], per-project origin open). **Still open** — everything below, plus external users (C.14). **Flags (not reconciled):** the answer lists Prime-Agent among development tools while the README says it "is a runtime component of the application, not the tool that built it" [Documented]; Copilot/Codex are named but leave no traces in the 54 commits (only Claude co-author trailers); "all development work done by LLMs and agents" sits against every commit being authored "Chris Schmidt" — the P.13 attribution rule stands unchanged.
-
-**B/U (idea, purpose):** What started SiteWatch AI — the safety problem, the RLM-as-component question, or the portfolio slot? How much of `project_concepts_ideas.md` is your framing vs the model's? (U.1) Has anyone else used or reviewed it, including a safety-domain reader? (C.14) What did you personally contribute beyond direction? (U.2) Which assumptions proved wrong? (U.3)
-**J (evaluation):** Who hand-labeled the 30 fixtures, and were labels fixed before runs? Is `agent_run.model = "prime-agent"` a placeholder — which exact model served each eval (the transcript names `z-ai/glm-5.3-flash`)? (CL-04/CL-07)
-**P (process):** Share of code per tool per phase (Sonnet 5 vs Opus 5.5 vs hand edits)? Review discipline before accepting a bulk commit? (P.2, P.12) Rejected agent output — examples? (P.15) Which components could you modify live unaided? (P.19)
-**Portfolio:** Confirm the ⚠ AUTHOR_CONTEXT lines — the physical-AI family grouping and sitework-ai as VERA's non-Meridian comparison baseline (B.22): what exactly does that comparison test?
-
-## 27. Skipped questions and why
-
-- **F.11 probe execution** — the run brief forbids executing repo code; invariants answered statically, probe idea in K.10.
-- **E.5b fresh resolve; K.2/K.7 runs** — installs/execution forbidden; lockfiles, artifact contents and CI evidence substituted with labels.
-- **J.12 pre-registration** — no pre-registration claim exists; n/a.
-- **Q.6–Q.7** — `[RESEARCH]` not applicable.
-- **M.12–M.15** — `[DEPLOY]` is documentation-only (ADR-004); folded into W-OPS-1.
-- **P.4–P.6, P.8–P.11, P.14–P.18, P.20–P.25, P.28** — LITE: the ★ subset answered; the rest restate §17 or are [Unknown] under the P.13 attribution rule.
-- **T-1 items 7–13** — LITE: the instructed 6 selected.
-- **O.3 commit-granularity statistics, O.6 forensics** — summarized in §16; full per-commit statistics not computed.
-
-*End of document.*
+Start-up points: `pipelines/vision/pipeline.py` for a camera, `agent/worker.py` for the agent step, `api/main.py` for the service. Run `make replay-up` for the Docker-only demo, or `uv sync` then `uv run pytest` (the sync pulls a multi-gigabyte graphics-card build of PyTorch). Without a database, 164 tests pass and 27 are skipped. Five files to read first: `agent/band3.py`, `pipelines/vision/rules.py`, `agent/prime_adapter.py`, `agent/worker.py`, `docs/12-roadmap.md`.
