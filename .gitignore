@@ -58,3 +58,8 @@ crash.*.log
 
 # Showcase recorder evidence (scripts/showcase_agent.py input; regenerable)
 /build/
+
+# Local Git history backups
+*-git-backup-*/
+.git-backup*/
+git-data.zip
