@@ -2,6 +2,8 @@
 
 **Industrial safety monitoring with computer vision, agent verification, and an auditable evidence trail.**
 
+**Project website:** [yash-rai-93.github.io/forgeguard-ai](https://yash-rai-93.github.io/forgeguard-ai/)
+
 ForgeGuard AI watches camera feeds for unsafe interactions between people and heavy machinery.
 It detects and tracks objects, measures movement on the ground plane, applies explicit safety
 rules, and sends triggered events to an agent that verifies the evidence by running Python.

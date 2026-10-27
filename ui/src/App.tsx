@@ -4,7 +4,14 @@ import { CamerasView } from './components/CamerasView'
 import { IncidentDetail } from './components/IncidentDetail'
 import { IncidentList } from './components/IncidentList'
 import { KpiBar } from './components/KpiBar'
-import { REPO_URL, STATIC_DEMO } from './config'
+import {
+  MAINTAINER_EMAIL,
+  MAINTAINER_NAME,
+  PROFILE_URL,
+  PROJECT_NAME,
+  REPO_URL,
+  STATIC_DEMO,
+} from './config'
 import { useLiveIncidents } from './hooks/useLiveIncidents'
 import type { IncidentState } from './types'
 
@@ -45,10 +52,10 @@ export default function App() {
       {STATIC_DEMO && <DemoBanner />}
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">SiteWatch AI</h1>
+          <h1 className="text-2xl font-bold">{PROJECT_NAME}</h1>
           <p className="text-sm text-slate-400">
-            Computer vision flags it in milliseconds; an AI agent checks the math before anyone is
-            paged.
+            Computer vision flags events; an AI agent checks the evidence before it reaches the
+            dashboard.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -82,7 +89,7 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="flex gap-1 border-b border-slate-800">
+      <nav aria-label="Dashboard views" className="flex gap-1 border-b border-slate-800">
         {(
           [
             ['incidents', 'Incidents'],
@@ -91,6 +98,8 @@ export default function App() {
         ).map(([id, label]) => (
           <button
             key={id}
+            type="button"
+            aria-pressed={tab === id}
             onClick={() => selectTab(id)}
             className={`px-4 py-2 text-sm -mb-px border-b-2 ${
               tab === id
@@ -136,6 +145,22 @@ export default function App() {
           </div>
         </>
       )}
+      <footer className="border-t border-slate-800 pt-4 flex flex-col sm:flex-row sm:justify-between gap-2 text-xs text-slate-400">
+        <p>
+          {PROJECT_NAME} · Maintained by{' '}
+          <a href={PROFILE_URL} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+            {MAINTAINER_NAME}
+          </a>
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <a href={`mailto:${MAINTAINER_EMAIL}`} className="break-all text-sky-300 hover:underline">
+            {MAINTAINER_EMAIL}
+          </a>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="text-sky-300 hover:underline">
+            GitHub repository
+          </a>
+        </div>
+      </footer>
     </main>
   )
 }
@@ -144,7 +169,7 @@ function DemoBanner() {
   return (
     <div className="rounded-lg border border-sky-800 bg-sky-950/40 px-4 py-3 text-sm text-sky-100">
       <strong className="font-semibold">Recorded demo.</strong> Everything here is real output
-      from the SiteWatch pipeline, captured offline because a static page can't run a GPU or an
+      from the {PROJECT_NAME} pipeline, captured offline because a static page can't run a GPU or an
       LLM. YOLO11s detection, ByteTrack tracking, camera calibration and the deterministic rules
       ran on every frame of each clip. The agent verdicts come from real Prime Agent runs checked
       by the Band-3 gate.{' '}

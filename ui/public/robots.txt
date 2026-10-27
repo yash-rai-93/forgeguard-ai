@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://yash-rai-93.github.io/forgeguard-ai/sitemap.xml

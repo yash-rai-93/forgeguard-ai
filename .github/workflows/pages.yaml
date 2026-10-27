@@ -1,11 +1,11 @@
 # Publishes the recorded demo dashboard to GitHub Pages
-# (https://pcschmidt.github.io/sitework-ai/).
+# https://yash-rai-93.github.io/forgeguard-ai/
 #
 # The static build (VITE_STATIC_DEMO=1) has no API or WebSocket: incidents,
 # KPIs, and camera recordings all come from ui/public/showcase/, which
 # pipelines/vision/record.py and scripts/showcase_agent.py generate offline
 # (GPU + real prime-agent runs). This job only builds and uploads files.
-name: pages
+name: Deploy ForgeGuard AI website
 
 on:
   push:
@@ -34,16 +34,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - uses: actions/configure-pages@v5
       - run: npm ci
       - run: npm test
       - run: npm run build
         env:
           VITE_STATIC_DEMO: "1"
-          VITE_BASE: /sitework-ai/
-      - uses: actions/upload-pages-artifact@v3
+          VITE_BASE: /forgeguard-ai/
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: ui/dist
 
