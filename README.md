@@ -287,7 +287,7 @@ sequenceDiagram
     W->>G: Check verdict against recorded tracks
     G-->>W: Pass or rejection reasons
     W->>P: Persist confirmed / needs_review record
-    P-->>U: NOTIFY change; WebSocket update
+    P-->>U: NOTIFY change and WebSocket update
     W->>R: Acknowledge after persistence
 ```
 
