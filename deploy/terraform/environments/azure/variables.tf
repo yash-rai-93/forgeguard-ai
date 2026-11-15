@@ -13,7 +13,7 @@ variable "environment" {
 # apply with a placeholder.
 variable "postgres_admin_login" {
   type        = string
-  default     = "sitewatch_admin"
+  default     = "forgeguard_admin"
   description = "Administrator login for the PostgreSQL Flexible Server."
 }
 

@@ -1,5 +1,5 @@
-project_id  = "sitewatch-ai-prod"
+project_id  = "forgeguard-ai-prod"
 environment = "reference"
 
 # Fill in after the worker's first `gcloud run deploy` (docs/deployment/gcp-deployment-guide.md §4-5).
-# worker_run_url = "https://sitewatch-ai-worker-REPLACE_ME-uc.a.run.app/pubsub/push"
+# worker_run_url = "https://forgeguard-ai-worker-REPLACE_ME-uc.a.run.app/pubsub/push"

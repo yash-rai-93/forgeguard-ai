@@ -3,7 +3,7 @@
 **Question:** can Prime Agent (Prime Intellect's open-source RLM agent,
 github.com/PrimeIntellect-ai/prime-agent — https://www.primeintellect.ai/blog/rlm; used here
 via a personal install/fork, github.com/PCSchmidt/prime-agent) be more than the tool that
-*builds* SiteWatch AI — can it be a **deployed component of the running application**, inside a
+*builds* ForgeGuard AI — can it be a **deployed component of the running application**, inside a
 Docker container, processing live incident events?
 
 **Verdict: Yes — feasible today, with named caveats and a built-in fallback.** This doc is the
@@ -26,7 +26,7 @@ evidence-based analysis. Verified against the installed Prime Agent package
 ## 1. What Makes Prime Agent Uniquely Suited Here
 
 Most "agent frameworks" in a CV pipeline would just be an LLM API call. Prime Agent brings four
-capabilities that map directly onto SiteWatch's cognitive plane:
+capabilities that map directly onto ForgeGuard's cognitive plane:
 
 1. **A persistent IPython REPL kernel as the agent's native tool.** The incident verifier does not
    *claim* "closing velocity was 2.3 m/s" — it executes NumPy/SciPy against the stored tracklet
@@ -51,7 +51,7 @@ invocation tiers, from thinnest to richest:
 Supports `--mode text` (final response only) or `--mode json` (full JSON event stream), multiple
 prompts, and image attachments.
 
-- SiteWatch use: stateless per-incident triage. The queue consumer (`agent/worker.py`) builds a
+- ForgeGuard use: stateless per-incident triage. The queue consumer (`agent/worker.py`) builds a
   prompt containing the TriggerEvent JSON + telemetry file path, invokes
   `prime-agent --mode json --no-session -p "<payload>"`, parses the JSON event stream for the final
   assistant message, validates against the IncidentRecord schema.
@@ -62,7 +62,7 @@ prompts, and image attachments.
 `dist/modes/rpc/rpc-types.d.ts` defines a **JSON-lines RPC protocol over stdin/stdout for headless
 operation**. Verified commands include:
 
-| RPC command | SiteWatch use |
+| RPC command | ForgeGuard use |
 | --- | --- |
 | `prompt`, `follow_up`, `steer` | Deliver incident payload; steer an in-flight triage with new telemetry |
 | `new_session` | Fresh session per incident (or reuse a warm session per shift) |

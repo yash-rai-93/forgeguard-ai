@@ -424,7 +424,7 @@ the sustained-load number, since that's the actual production duty cycle, not th
       inspection: (1) no explicit `name:` meant it defaulted to the same project name as
       `docker-compose.yml` (both files live in `docker/`) and a live test **recreated the main
       dev stack's `postgres` container** on shared container/network names -- fixed with an
-      explicit `name: sitework-replay-demo`; (2) `depends_on: [postgres]` alone only waits for the
+      explicit `name: forgeguard-replay-demo`; (2) `depends_on: [postgres]` alone only waits for the
       container to *start*, not for Postgres to accept connections or for `api`'s own
       `init_schema` to have run yet -- a live test hit both races for real (`api` and `replay` both
       crashed with `ConnectionRefusedError` on first boot, then `replay` crashed again with
@@ -537,7 +537,7 @@ firing) and the dual-plane verdict, at a public URL.
       view plays an incident's clip cued before its trigger and puts the fast plane's
       measurement, the agent's verdict and the gate's recheck side by side.
       `VITE_STATIC_DEMO=1` builds a server-less version; `.github/workflows/pages.yaml`
-      publishes it to <https://pcschmidt.github.io/sitework-ai/>.
+      publishes it to <https://yash-rai-93.github.io/forgeguard-ai/>.
 - [x] **Result**: dock, the 5 m warning fires at 4.20 m; the agent recomputes 4.20 m and returns
       `normal_ops`; confirmed. Aisle, the zone rule fires after 3.0 s; the agent returns
       `violation`; confirmed. Yard: detection only (below).

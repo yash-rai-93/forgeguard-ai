@@ -109,7 +109,7 @@ def render_shift_report_html(
     return (
         "<!doctype html><html><head><meta charset='utf-8'><title>Shift report</title>"
         f"{_STYLE}</head><body>"
-        "<h1>SiteWatch AI &mdash; shift report</h1>"
+        "<h1>ForgeGuard AI &mdash; shift report</h1>"
         f"{meta}"
         f'<div class="kpis">{"".join(kpi_cards)}</div>'
         f"{body}"

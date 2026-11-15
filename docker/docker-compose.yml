@@ -22,9 +22,9 @@ services:
   postgres:
     image: postgres:16.4-alpine
     environment:
-      POSTGRES_USER: sitewatch
-      POSTGRES_PASSWORD: sitewatch
-      POSTGRES_DB: sitewatch
+      POSTGRES_USER: forgeguard
+      POSTGRES_PASSWORD: forgeguard
+      POSTGRES_DB: forgeguard
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks: [internal]
@@ -34,7 +34,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
     environment:
-      DATABASE_URL: postgresql://sitewatch:sitewatch@postgres:5432/sitewatch
+      DATABASE_URL: postgresql://forgeguard:forgeguard@postgres:5432/forgeguard
       # Same volume the agent service writes evidence into (below) -- read-only
       # here since the API only serves clip.mp4/tracks.jsonl, never writes them.
       WORKSPACE_ROOT: /workspace
@@ -59,7 +59,7 @@ services:
     command:
       ["/app/.venv/bin/python3", "-m", "agent.worker",
        "--redis-url", "redis://redis:6379",
-       "--postgres-dsn", "postgresql://sitewatch:sitewatch@postgres:5432/sitewatch",
+       "--postgres-dsn", "postgresql://forgeguard:forgeguard@postgres:5432/forgeguard",
        "--workspace-root", "/workspace",
        "--evidence-root", "/workspace/incidents"]
     volumes:
@@ -74,7 +74,7 @@ services:
     build: &vision-build
       context: ..
       dockerfile: docker/Dockerfile.vision
-    image: sitework-vision:latest   # all three workers share this one image
+    image: forgeguard-vision:latest   # all three workers share this one image
     environment: &vision-env
       REDIS_URL: redis://redis:6379
       # Must match the agent service's --evidence-root (/workspace/incidents) --
@@ -102,7 +102,7 @@ services:
 
   vision-aisle:
     build: *vision-build
-    image: sitework-vision:latest
+    image: forgeguard-vision:latest
     environment: *vision-env
     volumes: *vision-volumes
     command: ["python3", "-m", "pipelines.vision.pipeline",
@@ -120,7 +120,7 @@ services:
 
   vision-yard:
     build: *vision-build
-    image: sitework-vision:latest
+    image: forgeguard-vision:latest
     environment: *vision-env
     volumes: *vision-volumes
     command: ["python3", "-m", "pipelines.vision.pipeline",

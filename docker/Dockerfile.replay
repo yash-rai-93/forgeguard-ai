@@ -21,4 +21,4 @@ COPY evaluation/fixtures/incidents ./evaluation/fixtures/incidents
 
 CMD ["python3", "-m", "scripts.replay_demo", \
      "--workspace-root", "/workspace", \
-     "--postgres-dsn", "postgresql://sitewatch:sitewatch@postgres:5432/sitewatch"]
+     "--postgres-dsn", "postgresql://forgeguard:forgeguard@postgres:5432/forgeguard"]

@@ -1,7 +1,7 @@
 [project]
-name = "sitework-ai"
+name = "forgeguard-ai"
 version = "0.1.0"
-description = "SiteWatch AI — hybrid deterministic/probabilistic industrial safety telemetry"
+description = "ForgeGuard AI — hybrid deterministic/probabilistic industrial safety telemetry"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

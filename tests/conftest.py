@@ -16,7 +16,7 @@ from api.db import init_schema
 _FAKE_SCRIPT = Path(__file__).parent / "_fake_prime_agent.py"
 
 TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql://sitewatch:sitewatch@localhost:5432/sitewatch"
+    "TEST_DATABASE_URL", "postgresql://forgeguard:forgeguard@localhost:5432/forgeguard"
 )
 
 

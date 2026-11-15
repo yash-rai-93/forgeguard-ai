@@ -3,7 +3,7 @@
 
 variable "project_id" {
   type        = string
-  default     = "sitewatch-ai-prod"
+  default     = "forgeguard-ai-prod"
   description = "GCP project ID."
 }
 
@@ -15,6 +15,6 @@ variable "environment" {
 
 variable "worker_run_url" {
   type        = string
-  default     = "https://sitewatch-ai-worker-abc123-uc.a.run.app/pubsub/push"
+  default     = "https://forgeguard-ai-worker-abc123-uc.a.run.app/pubsub/push"
   description = "Cloud Run push endpoint for the anomaly-events subscription -- fill in with the real service URL after the worker's first `gcloud run deploy` (the guide's §4/§5 imperative steps; not managed by this Terraform)."
 }

@@ -1,6 +1,6 @@
-# SiteWatch AI — Azure Deployment Guide (Deployable Reference Architecture)
+# ForgeGuard AI — Azure Deployment Guide (Deployable Reference Architecture)
 
-> **Scope statement.** SiteWatch AI is a portfolio project; this is deployable reference
+> **Scope statement.** ForgeGuard AI is a portfolio project; this is deployable reference
 > architecture documentation for Microsoft Azure. No live deployment is performed; all
 > `terraform apply` commands are intentionally commented out.
 
@@ -28,7 +28,7 @@ worker), delivery plane (FastAPI + React), and persistence.
 az version && terraform --version && docker --version
 # Authenticate and set subscription context
 az login
-az account set --subscription "sitewatch-ai-reference"
+az account set --subscription "forgeguard-ai-reference"
 # Register resource providers
 az provider register --namespace Microsoft.App
 az provider register --namespace Microsoft.ServiceBus
@@ -45,9 +45,9 @@ Terraform root: `deploy/terraform/environments/azure`; CI runs `terraform fmt -c
 # deploy/terraform/environments/azure/main.tf
 locals {
   location = "eastus"
-  rg_name  = "rg-sitewatch-ai"
+  rg_name  = "rg-forgeguard-ai"
   tags = {
-    project     = "sitewatch-ai"
+    project     = "forgeguard-ai"
     managed-by  = "terraform"
     ttl         = "30d"          # auto-expiry tag for cost safety
     environment = "reference"
@@ -62,7 +62,7 @@ resource "azurerm_resource_group" "rg" {
 
 # --- Service Bus: anomaly events queue + dead-letter subqueue ----------------
 resource "azurerm_servicebus_namespace" "sb" {
-  name                = "sitewatch-ai-servicebus"
+  name                = "forgeguard-ai-servicebus"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "Standard"
@@ -70,7 +70,7 @@ resource "azurerm_servicebus_namespace" "sb" {
 }
 
 resource "azurerm_servicebus_queue" "anomaly_events" {
-  name         = "sitewatch-ai-anomaly-events"
+  name         = "forgeguard-ai-anomaly-events"
   namespace_id = azurerm_servicebus_namespace.sb.id
 
   max_delivery_count   = 5     # then -> dead-letter subqueue
@@ -80,7 +80,7 @@ resource "azurerm_servicebus_queue" "anomaly_events" {
 
 # --- Azure Files NFS (Premium): persistent agent harness state (/home/node/.prime)
 resource "azurerm_storage_account" "prime_state" {
-  name                     = "stsitewatchaiprime"
+  name                     = "stforgeguardaiprime"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Premium"
@@ -98,7 +98,7 @@ resource "azurerm_storage_share" "prime_state" {
 
 # --- Blob Storage: incident clips --------------------------------------------
 resource "azurerm_storage_account" "clips" {
-  name                     = "stsitewatchaiclips"
+  name                     = "stforgeguardaiclips"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -114,7 +114,7 @@ resource "azurerm_storage_container" "incident_clips" {
 
 # --- Azure Database for PostgreSQL Flexible Server ---------------------------
 resource "azurerm_postgresql_flexible_server" "pg" {
-  name                    = "psql-sitewatch-ai"
+  name                    = "psql-forgeguard-ai"
   resource_group_name     = azurerm_resource_group.rg.name
   location                = azurerm_resource_group.rg.location
   version                 = "15"
@@ -149,19 +149,19 @@ terraform plan -out=tfplan
 ## 4. Container Image Publication
 
 ```bash
-ACR=sitewatchaiacr.azurecr.io
-az acr create --name sitewatchaiacr --resource-group rg-sitewatch-ai \
+ACR=forgeguardaiacr.azurecr.io
+az acr create --name forgeguardaiacr --resource-group rg-forgeguard-ai \
   --sku Standard --admin-enabled false   # use managed identity for pulls
-az acr login --name sitewatchaiacr
+az acr login --name forgeguardaiacr
 
 # Both Dockerfiles build from the repo root (docker/docker-compose.yml's own
 # `context: ..`), not a services/ subdirectory -- this guide previously
 # referenced ./services/reasoning-worker and ./services/backend, neither of
 # which exists in this repo.
-docker build -f docker/Dockerfile.agent -t ${ACR}/sitewatch-ai/worker:0.1.0 .   # agent slow-path worker
-docker push ${ACR}/sitewatch-ai/worker:0.1.0
-docker build -f docker/Dockerfile.web -t ${ACR}/sitewatch-ai/backend:0.1.0 .    # FastAPI delivery plane
-docker push ${ACR}/sitewatch-ai/backend:0.1.0
+docker build -f docker/Dockerfile.agent -t ${ACR}/forgeguard-ai/worker:0.1.0 .   # agent slow-path worker
+docker push ${ACR}/forgeguard-ai/worker:0.1.0
+docker build -f docker/Dockerfile.web -t ${ACR}/forgeguard-ai/backend:0.1.0 .    # FastAPI delivery plane
+docker push ${ACR}/forgeguard-ai/backend:0.1.0
 ```
 
 ## 5. Secrets & Identity
@@ -171,11 +171,11 @@ connection strings or registry credentials in the app. Least-privilege role
 assignments:
 
 ```bash
-WORKER=$(az containerapp show -g rg-sitewatch-ai -n sitewatch-ai-worker \
+WORKER=$(az containerapp show -g rg-forgeguard-ai -n forgeguard-ai-worker \
   --query identity.principalId -o tsv)
-BACKEND=$(az containerapp show -g rg-sitewatch-ai -n sitewatch-ai-backend \
+BACKEND=$(az containerapp show -g rg-forgeguard-ai -n forgeguard-ai-backend \
   --query identity.principalId -o tsv)
-SB_ID=$(az servicebus namespace show -g rg-sitewatch-ai -n sitewatch-ai-servicebus --query id -o tsv)
+SB_ID=$(az servicebus namespace show -g rg-forgeguard-ai -n forgeguard-ai-servicebus --query id -o tsv)
 
 # 1. Worker: receive + send on the anomaly queue ONLY
 az role assignment create --assignee-object-id ${WORKER} --assignee-principal-type ServicePrincipal \
@@ -185,16 +185,16 @@ az role assignment create --assignee-object-id ${WORKER} --assignee-principal-ty
 # 2. Worker: read/write incident clips only (blob data plane)
 az role assignment create --assignee-object-id ${WORKER} --assignee-principal-type ServicePrincipal \
   --role "Storage Blob Data Contributor" \
-  --scope $(az storage container show -n incident-clips --account-name stsitewatchaiclips --query id -o tsv)
+  --scope $(az storage container show -n incident-clips --account-name stforgeguardaiclips --query id -o tsv)
 # 3. Worker NFS share access is enforced via VNet-integrated Container Apps env + account firewall.
 
 # 4. Backend: PostgreSQL data-plane access via Entra (Azure AD) auth, no SQL admin password
 az role assignment create --assignee-object-id ${BACKEND} --assignee-principal-type ServicePrincipal \
-  --role "Contributor" --scope $(az postgres flexible-server show -g rg-sitewatch-ai -n psql-sitewatch-ai --query id -o tsv)
+  --role "Contributor" --scope $(az postgres flexible-server show -g rg-forgeguard-ai -n psql-forgeguard-ai --query id -o tsv)
 
 # 5. LLM provider API key: injected as a Container Apps secret, never baked into images
-az containerapp secret set -g rg-sitewatch-ai -n sitewatch-ai-worker \
-  --secrets llm-api-key=keyvaultref=https://kv-sitewatch-ai.vault.azure.net/secrets/llm-api-key,identity=system
+az containerapp secret set -g rg-forgeguard-ai -n forgeguard-ai-worker \
+  --secrets llm-api-key=keyvaultref=https://kv-forgeguard-ai.vault.azure.net/secrets/llm-api-key,identity=system
 ```
 
 ## 6. Smoke Test
@@ -204,10 +204,10 @@ Inject a synthetic anomaly event and verify the full SLOW PATH response.
 ```bash
 # 1. Send a synthetic geofence-intrusion trigger (matches FAST PATH schema)
 SB_CS=$(az servicebus namespace authorization-rule keys list \
-  -g rg-sitewatch-ai --namespace-name sitewatch-ai-servicebus -n RootManageSharedAccessKey \
+  -g rg-forgeguard-ai --namespace-name forgeguard-ai-servicebus -n RootManageSharedAccessKey \
   --query primaryConnectionString -o tsv)
 az servicebus queue send --connection-string ${SB_CS} \
-  --queue-name sitewatch-ai-anomaly-events --message '{
+  --queue-name forgeguard-ai-anomaly-events --message '{
   "event_id": "smoke-001", "event_type": "geofence_intrusion",
   "camera_id": "cam-east-gate", "tracklet_id": "tk-4471",
   "ground_coords_m": {"x": 12.4, "y": 8.1}, "velocity_ms": 1.6,
@@ -215,11 +215,11 @@ az servicebus queue send --connection-string ${SB_CS} \
 }'
 
 # 2. Confirm the queue drained (no dead-letter accumulation)
-az servicebus queue show -g rg-sitewatch-ai --namespace-name sitewatch-ai-servicebus \
-  -n sitewatch-ai-anomaly-events --query "countDetails.{active:activeMessages,dlq:deadLetterMessageCount}" -o table
+az servicebus queue show -g rg-forgeguard-ai --namespace-name forgeguard-ai-servicebus \
+  -n forgeguard-ai-anomaly-events --query "countDetails.{active:activeMessages,dlq:deadLetterMessageCount}" -o table
 
 # 3. Check the worker logs for the expected agent pipeline stages
-az containerapp logs show -g rg-sitewatch-ai -n sitewatch-ai-worker --tail 50
+az containerapp logs show -g rg-forgeguard-ai -n forgeguard-ai-worker --tail 50
 ```
 
 Expected agent incident response, in order:
@@ -242,13 +242,13 @@ and all six stages present in logs within 120 seconds.
 ```bash
 # Budget alerts at $5 and $15 (do this BEFORE any apply)
 az consumption budget create \
-  --budget-name "sitewatch-ai-5usd" --amount 5 --time-grain Monthly \
+  --budget-name "forgeguard-ai-5usd" --amount 5 --time-grain Monthly \
   --category Cost --start-date 2026-01-01 --end-date 2026-12-31 \
-  --notifications '{"actual_GreaterThan_50_Percent":{"enabled":true,"operator":"GreaterThan","threshold":50,"contactEmails":["ops@sitewatch-ai.dev"]}}'
+  --notifications '{"actual_GreaterThan_50_Percent":{"enabled":true,"operator":"GreaterThan","threshold":50,"contactEmails":["ops@example.com"]}}'
 az consumption budget create \
-  --budget-name "sitewatch-ai-15usd" --amount 15 --time-grain Monthly \
+  --budget-name "forgeguard-ai-15usd" --amount 15 --time-grain Monthly \
   --category Cost --start-date 2026-01-01 --end-date 2026-12-31 \
-  --notifications '{"actual_GreaterThan_90_Percent":{"enabled":true,"operator":"GreaterThan","threshold":90,"contactEmails":["ops@sitewatch-ai.dev"]}}'
+  --notifications '{"actual_GreaterThan_90_Percent":{"enabled":true,"operator":"GreaterThan","threshold":90,"contactEmails":["ops@example.com"]}}'
 
 # Destructive teardown — reference environments only
 # terraform destroy -target=azurerm_postgresql_flexible_server.pg   # keep-always-on cost — first
@@ -256,7 +256,7 @@ az consumption budget create \
 # terraform destroy                                                  # remainder (removes RG scope)
 
 # Manual fallbacks if Terraform state is unavailable
-# az group delete --name rg-sitewatch-ai --yes --no-wait
+# az group delete --name rg-forgeguard-ai --yes --no-wait
 ```
 
 Cost-safety rules:

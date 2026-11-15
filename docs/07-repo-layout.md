@@ -3,7 +3,7 @@
 ## 1. Layout
 
 ```text
-sitework-ai/
+forgeguard-ai/
 ├── PLAN.md                           # this planning suite's master plan
 ├── project_concepts_ideas.md         # original Gemini conversation (provenance)
 ├── docs/                             # architecture + deployment + ADR suite (see PLAN.md index)
@@ -88,7 +88,7 @@ sitework-ai/
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
 | `ci.yaml` | PR/push | ruff + mypy + pytest (unit); ui lint/vitest; `docker compose config` validity; schema compat check |
-| `pages.yaml` | push to main touching `ui/`, or manual | builds the dashboard with `VITE_STATIC_DEMO=1` and publishes it to GitHub Pages (<https://pcschmidt.github.io/sitework-ai/>) (M7) |
+| `pages.yaml` | push to main touching `ui/`, or manual | builds the dashboard with `VITE_STATIC_DEMO=1` and publishes it to GitHub Pages (<https://yash-rai-93.github.io/forgeguard-ai/>) (M7) |
 | `iac-check.yaml` | PR touching `deploy/` | `terraform fmt -check` + `terraform validate` across aws/gcp/azure envs (no apply, ever) |
 | `eval.yaml` | manual dispatch | headless benchmark run on self-hosted GPU runner; posts summary; artifact: `docs/benchmarks.md` diff |
 | `contract-agent.yaml` | PR/push touching `agent/`, the contract test, or its fixtures | replays a real, captured `prime-agent` RPC transcript (`tests/fixtures/golden_prime_agent_session.jsonl`, `scripts/record_golden_session.py`) against `PrimeAdapter` (feasibility guard, F1). Does not drive the live CLI -- prime-agent still isn't installable in CI (private-registry gap, spike-01 Finding 1); this catches adapter-side regressions, not prime-agent protocol drift. Built 2026-09-17, after the M3 eval set closed M3 |

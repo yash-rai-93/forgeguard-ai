@@ -1,6 +1,6 @@
 # 03 — Hybrid Deterministic/Probabilistic Design
 
-This is the architectural thesis of SiteWatch AI: pure probabilistic systems (end-to-end VLM
+This is the architectural thesis of ForgeGuard AI: pure probabilistic systems (end-to-end VLM
 reasoning on frames) are too slow, costly, and non-deterministic for physical safety; pure
 deterministic systems (handcrafted OpenCV heuristics) fail on edge cases, occlusion, and context.
 The answer is a **neuro-symbolic dual-plane architecture** with explicit contracts.

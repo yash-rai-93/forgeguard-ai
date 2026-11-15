@@ -9,7 +9,7 @@ path split at module granularity; this doc adds the C4 levels above it and the s
 
 ## C4 Level 1 — System Context
 
-Who and what SiteWatch AI talks to, with no internals shown.
+Who and what ForgeGuard AI talks to, with no internals shown.
 
 ```mermaid
 flowchart TB
@@ -18,7 +18,7 @@ flowchart TB
     LLM["LLM Provider<br>(OpenRouter / Z.ai / local Ollama —<br>OpenAI-compatible base URL)"]
     CLOUD["Reference cloud environments<br>(AWS / GCP / Azure —<br>Terraform validated, never applied, ADR-004)"]
 
-    subgraph SYS["SiteWatch AI"]
+    subgraph SYS["ForgeGuard AI"]
         SW["Dual-plane safety intelligence system:<br>deterministic fast path + LLM-verified slow path<br>+ delivery plane (API/dashboard)"]
     end
 

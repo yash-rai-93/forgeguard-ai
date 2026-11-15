@@ -48,7 +48,7 @@ from pipelines.geometry.motion import MotionCompensator
 from pipelines.geometry.zones import ZoneEngine
 from pipelines.ingestion.frame_source import FrameSource
 from pipelines.schemas import CalibrationQuality, TrackletFrame
-from pipelines.vision.detector import COCO_TO_SITEWATCH, Detector
+from pipelines.vision.detector import COCO_TO_FORGEGUARD, Detector
 from pipelines.vision.evidence import EvidenceCapture
 from pipelines.vision.rules import RuleEngine
 
@@ -96,7 +96,7 @@ def build_tracks(
         confs = result.boxes.conf.cpu().numpy()
         clss = result.boxes.cls.cpu().numpy().astype(int)
         for tid, box, conf, cid in zip(ids, boxes, confs, clss, strict=True):
-            cls = COCO_TO_SITEWATCH.get(result.names[cid])
+            cls = COCO_TO_FORGEGUARD.get(result.names[cid])
             if cls is None or conf < detector.confidence_gate:
                 continue
             track_id = int(tid)

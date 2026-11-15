@@ -11,7 +11,7 @@
 
 ## 1. Problem Statement
 
-Industrial environments — loading docks, warehouses, active construction sites — mix fast heavy machinery with vulnerable humans. Safety programs today rely on human spot-checks, static signage, and after-the-fact incident review. Continuous, automated, *explainable* safety telemetry is the gap SiteWatch AI addresses:
+Industrial environments — loading docks, warehouses, active construction sites — mix fast heavy machinery with vulnerable humans. Safety programs today rely on human spot-checks, static signage, and after-the-fact incident review. Continuous, automated, *explainable* safety telemetry is the gap ForgeGuard AI addresses:
 
 1. **Detect** people, forklifts, excavators, and PPE state in real time from standard CCTV/RTSP feeds.
 2. **Quantify** risk in physical units — metric distances, velocities, time-in-zone — not just pixels.
@@ -42,7 +42,7 @@ The concept emerged from a Gemini conversation (archived verbatim in
 
 ## 4. Personas
 
-| Persona | Need | How SiteWatch serves them |
+| Persona | Need | How ForgeGuard serves them |
 | --- | --- | --- |
 | **Portfolio reviewer (engineering lead)** | Judge systems design, CV depth, agent architecture maturity | Clean architecture docs, ADRs, benchmark matrix, validated IaC, one-command demo |
 | **Site safety manager (fictional user)** | Fewer false alarms, auditable incidents, shift reports | Deterministic gating (low false positives), evidence-linked reports, KPI dashboards |

@@ -5,9 +5,9 @@
 
 locals {
   location = "eastus"
-  rg_name  = "rg-sitewatch-ai"
+  rg_name  = "rg-forgeguard-ai"
   tags = {
-    project     = "sitewatch-ai"
+    project     = "forgeguard-ai"
     managed-by  = "terraform"
     ttl         = "30d" # auto-expiry tag for cost safety
     environment = var.environment
@@ -24,7 +24,7 @@ resource "azurerm_resource_group" "rg" {
 resource "azurerm_servicebus_namespace" "sb" {
   # Azure rejects names ending in "-sb"/"-mgmt"/a hyphen -- real validation
   # error caught by actually running `terraform validate`, not by inspection.
-  name                = "sitewatch-ai-servicebus"
+  name                = "forgeguard-ai-servicebus"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   sku                 = "Standard"
@@ -32,7 +32,7 @@ resource "azurerm_servicebus_namespace" "sb" {
 }
 
 resource "azurerm_servicebus_queue" "anomaly_events" {
-  name         = "sitewatch-ai-anomaly-events"
+  name         = "forgeguard-ai-anomaly-events"
   namespace_id = azurerm_servicebus_namespace.sb.id
 
   max_delivery_count                   = 5 # then -> dead-letter subqueue
@@ -42,7 +42,7 @@ resource "azurerm_servicebus_queue" "anomaly_events" {
 
 # --- Azure Files NFS (Premium): persistent agent harness state (/home/node/.prime)
 resource "azurerm_storage_account" "prime_state" {
-  name                     = "stsitewatchaiprime"
+  name                     = "stforgeguardaiprime"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Premium"
@@ -63,7 +63,7 @@ resource "azurerm_storage_share" "prime_state" {
 
 # --- Blob Storage: incident clips --------------------------------------------
 resource "azurerm_storage_account" "clips" {
-  name                     = "stsitewatchaiclips"
+  name                     = "stforgeguardaiclips"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -79,7 +79,7 @@ resource "azurerm_storage_container" "incident_clips" {
 
 # --- Azure Database for PostgreSQL Flexible Server ---------------------------
 resource "azurerm_postgresql_flexible_server" "pg" {
-  name                   = "psql-sitewatch-ai"
+  name                   = "psql-forgeguard-ai"
   resource_group_name    = azurerm_resource_group.rg.name
   location               = azurerm_resource_group.rg.location
   version                = "15"

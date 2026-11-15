@@ -12,12 +12,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# COCO classes of interest -> SiteWatch classes.
+# COCO classes of interest -> ForgeGuard classes.
 # spike-02 result (2026-09-16): the truck/bus -> heavy_vehicle proxy is the shipped
 # forklift stand-in — it fires reliably on real footage, while YOLO-World and a
 # synthetic-only fine-tune both failed. True `forklift` class returns at M5 via a
 # real-frame fine-tune (Pictor-v3 + hand-labeled demo frames).
-COCO_TO_SITEWATCH: dict[str, str] = {
+COCO_TO_FORGEGUARD: dict[str, str] = {
     "person": "person",
     "bicycle": "vehicle",
     "car": "vehicle",
@@ -65,7 +65,7 @@ class Detector:
             strict=True,
         ):
             coco_name = names[cls_id]
-            cls = COCO_TO_SITEWATCH.get(coco_name)
+            cls = COCO_TO_FORGEGUARD.get(coco_name)
             if cls is None or conf < self.confidence_gate:
                 continue
             out.append(
