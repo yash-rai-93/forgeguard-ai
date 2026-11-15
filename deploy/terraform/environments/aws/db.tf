@@ -54,7 +54,7 @@ resource "aws_rds_cluster" "postgres" {
   engine             = "aurora-postgresql"
   engine_mode        = "provisioned"
   engine_version     = "15.4"
-  database_name      = "sitewatch" # matches docker/docker-compose.yml's POSTGRES_DB
+  database_name      = "forgeguard" # matches docker/docker-compose.yml's POSTGRES_DB
   master_username    = var.db_master_username
   master_password    = var.db_master_password
 

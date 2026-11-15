@@ -201,7 +201,7 @@ tuned for (industrial-site pedestrian counts, not train-station-density crowds) 
 this being a real property of the detector/scene match, not a broken harness (the harness's own
 unit tests, `tests/test_eval_tracking.py`, verify a perfect-hypothesis input scores MOTA=IDF1=1.0).
 **Not claimed:** that this detector is suitable for dense-crowd pedestrian tracking -- it was
-never scoped to be; SiteWatch AI's actual demo scenes (dock/yard/aisle, a handful of people +
+never scoped to be; ForgeGuard AI's actual demo scenes (dock/yard/aisle, a handful of people +
 vehicles) are a very different distribution than MOT17's train-station crowds.
 
 ### M5 exit checklist (docs/12-roadmap.md)

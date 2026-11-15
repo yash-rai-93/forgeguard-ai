@@ -11,7 +11,7 @@
 # `docker/`, same as docker-compose.yml -- which collides on container/network
 # names and would recreate/take over a running docker-compose.yml stack; a
 # live test of this file without an explicit name did exactly that).
-name: sitework-replay-demo
+name: forgeguard-replay-demo
 # Published ports bind to 127.0.0.1 (this machine only) by default: the API has no
 # authentication (docs/08 §2). To reach the stack from another device on your network,
 # opt in explicitly, e.g. `BIND_ADDR=0.0.0.0 make up`.
@@ -19,9 +19,9 @@ services:
   postgres:
     image: postgres:16.4-alpine
     environment:
-      POSTGRES_USER: sitewatch
-      POSTGRES_PASSWORD: sitewatch
-      POSTGRES_DB: sitewatch
+      POSTGRES_USER: forgeguard
+      POSTGRES_PASSWORD: forgeguard
+      POSTGRES_DB: forgeguard
     volumes:
       - pgdata_replay:/var/lib/postgresql/data
     healthcheck:
@@ -29,7 +29,7 @@ services:
       # hit a real crash-loop -- `depends_on` alone only waits for the
       # container to *start*, not for Postgres to actually accept
       # connections yet, so both exited on ConnectionRefusedError.
-      test: ["CMD-SHELL", "pg_isready -U sitewatch -d sitewatch"]
+      test: ["CMD-SHELL", "pg_isready -U forgeguard -d forgeguard"]
       interval: 2s
       timeout: 3s
       retries: 20
@@ -40,7 +40,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
     environment:
-      DATABASE_URL: postgresql://sitewatch:sitewatch@postgres:5432/sitewatch
+      DATABASE_URL: postgresql://forgeguard:forgeguard@postgres:5432/forgeguard
       WORKSPACE_ROOT: /workspace
     volumes:
       - replay_workspace:/workspace:ro
@@ -75,7 +75,7 @@ services:
     command:
       ["python3", "-m", "scripts.replay_demo",
        "--workspace-root", "/workspace",
-       "--postgres-dsn", "postgresql://sitewatch:sitewatch@postgres:5432/sitewatch",
+       "--postgres-dsn", "postgresql://forgeguard:forgeguard@postgres:5432/forgeguard",
        "--interval-s", "15", "--shuffle"]
     volumes:
       - replay_workspace:/workspace

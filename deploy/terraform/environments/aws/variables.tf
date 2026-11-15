@@ -18,7 +18,7 @@ variable "environment" {
 
 variable "project_name" {
   type        = string
-  default     = "sitewatch-ai"
+  default     = "forgeguard-ai"
   description = "Base naming prefix for all resources."
 }
 
@@ -34,7 +34,7 @@ variable "private_subnet_ids" {
 
 variable "agent_image_uri" {
   type        = string
-  description = "ECR URI of the containerized agent worker image (docker/Dockerfile.agent), e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/sitewatch-agent:latest."
+  description = "ECR URI of the containerized agent worker image (docker/Dockerfile.agent), e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/forgeguard-agent:latest."
 }
 
 variable "cpu" {
@@ -51,7 +51,7 @@ variable "memory" {
 
 variable "db_master_username" {
   type        = string
-  default     = "sitewatch_admin"
+  default     = "forgeguard_admin"
   description = "Master username for the Aurora Serverless v2 cluster."
 }
 

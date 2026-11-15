@@ -13,6 +13,19 @@ A separate recomputation gate checks supported claims before the incident reache
 showcase, a Docker replay demo, a GPU video pipeline, evaluation reports, and reference cloud
 infrastructure. See the [roadmap](docs/12-roadmap.md) for completed work and remaining gaps.
 
+## Existing deployments
+
+The ForgeGuard defaults use a new local database name and user, a new Docker Compose replay
+project name, and new names for the reference cloud resources. For an existing setup, back up
+PostgreSQL and restore it into the new database before switching over. Review the Terraform plan
+for resource replacements before applying it to existing state.
+
+## Upstream code and license
+
+ForgeGuard AI adapts [SiteWatch AI](https://github.com/PCSchmidt/sitework-ai).
+The upstream copyright and MIT license notice is in [LICENSE](LICENSE).
+Model weights, media and dependencies have their own terms.
+
 ## Demo
 
 ![The live demo: the fast plane tracks a worker and a forklift with boxes and a live distance

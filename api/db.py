@@ -14,7 +14,7 @@ import asyncpg
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
-DEFAULT_DSN = "postgresql://sitewatch:sitewatch@localhost:5432/sitewatch"
+DEFAULT_DSN = "postgresql://forgeguard:forgeguard@localhost:5432/forgeguard"
 
 
 async def create_pool(dsn: str = DEFAULT_DSN) -> asyncpg.Pool:

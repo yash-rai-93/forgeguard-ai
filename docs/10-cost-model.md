@@ -57,7 +57,7 @@ hosted anywhere**, the free-tier hosting in the table below was never set up, an
 "Trigger Incident Audit" button was not built. The table is the plan for hosting it.
 
 **As built (M7):** a narrower pattern is hosted, at $0: the dashboard alone, as a static GitHub
-Pages build (<https://pcschmidt.github.io/sitework-ai/>, `.github/workflows/pages.yaml`). It has
+Pages build (<https://yash-rai-93.github.io/forgeguard-ai/>, `.github/workflows/pages.yaml`). It has
 no backend at all. It plays recorded camera clips with their per-frame pipeline output and the
 records of real agent runs, all produced offline (`make showcase`, `make showcase-agent`; the two
 incidents cost about $0.004 in inference, plus about $0.004 for the reruns M7 documents). Nothing
@@ -118,7 +118,7 @@ Scenario B — Production-style (10 continuous streams, edge GPU on-prem, cloud 
 ## 5. Billing Guardrails (for anyone who does provision)
 
 1. Budgets with alerts at $5 and $15 (AWS Budgets / GCP Budget / Azure Cost Management), SMS+email.
-2. All resources tagged `ttl=4h`, `project=sitewatch-ai`; scheduled `aws-nuke`/script teardown.
+2. All resources tagged `ttl=4h`, `project=forgeguard-ai`; scheduled `aws-nuke`/script teardown.
 3. `terraform apply` commented in runbooks with COST WARNING blocks; `destroy` documented first.
 4. Auto-shutdown Lambda/Function if spend > $20 in cycle (documented pattern).
 5. No NAT gateways (top surprise-bill source) — VPC endpoints/private egress documented instead.

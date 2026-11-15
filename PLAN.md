@@ -1,13 +1,13 @@
-# SiteWatch AI — Master Project Plan
+# ForgeGuard AI — Master Project Plan
 
 **Autonomous Industrial Safety & Fleet Telemetry Platform**
 A hybrid deterministic/probabilistic computer vision system for warehouses and construction sites.
 
 | Field | Value |
 | --- | --- |
-| Project | SiteWatch AI (`sitework-ai`) |
+| Project | ForgeGuard AI (`forgeguard-ai`) |
 | Type | Portfolio / reference-architecture project (no live cloud deployment required) |
-| Status | M0–M7 closed (see `docs/12-roadmap.md`); live demo at <https://pcschmidt.github.io/sitework-ai/>. Known, disclosed gaps are listed there and in docs/02 §1 |
+| Status | M0–M7 closed (see `docs/12-roadmap.md`); recorded demo at <https://yash-rai-93.github.io/forgeguard-ai/>. Known, disclosed gaps are listed there and in docs/02 §1 |
 | Source of idea | `project_concepts_ideas.md` (Gemini conversation, summarized in [docs/01-vision-and-scope.md](docs/01-vision-and-scope.md)) |
 | Existing IaC artifact | `SiteWatch AI - AWS ECS Fargate & EFS Terraform Configuration.pdf` (full AWS Terraform spec) |
 
@@ -15,7 +15,7 @@ A hybrid deterministic/probabilistic computer vision system for warehouses and c
 
 ## 1. Executive Summary
 
-SiteWatch AI is a full-stack, AI-enabled computer vision application that ingests streaming video from warehouse and construction site cameras, detects and tracks people and heavy machinery in real time, projects detections onto a metric ground plane, evaluates deterministic spatial safety rules (geofences, proximity envelopes, time-in-zone), and escalates only ambiguous or compound anomalies to a multi-agent LLM reasoning layer that performs kinematic verification, regulatory compliance correlation, and end-of-shift audit synthesis.
+ForgeGuard AI is a full-stack, AI-enabled computer vision application that ingests streaming video from warehouse and construction site cameras, detects and tracks people and heavy machinery in real time, projects detections onto a metric ground plane, evaluates deterministic spatial safety rules (geofences, proximity envelopes, time-in-zone), and escalates only ambiguous or compound anomalies to a multi-agent LLM reasoning layer that performs kinematic verification, regulatory compliance correlation, and end-of-shift audit synthesis.
 
 The defining architectural idea — and the portfolio centerpiece — is the **dual-plane split**:
 

@@ -1,4 +1,4 @@
-# AWS Deployment Guide — SiteWatch AI Cognitive Worker
+# AWS Deployment Guide — ForgeGuard AI Cognitive Worker
 
 **Deployable reference architecture.** This runbook documents a complete, syntactically valid
 deployment. Per ADR-004, `terraform apply` is never executed in CI; every provisioning step ends
@@ -60,23 +60,23 @@ terraform plan -out=tfplan                      # review: queue, DLQ, EFS, S3, A
 # "agent-worker", not "prime-agent-worker" -- prime-agent is the vendored CLI
 # this container runs (docker/vendor/README.md), not this repo's own image name;
 # matches the ECS container name in deploy/terraform/environments/aws/main.tf.
-aws ecr create-repository --repository-name sitewatch-ai/agent-worker
+aws ecr create-repository --repository-name forgeguard-ai/agent-worker
 aws ecr get-login-password | docker login --username AWS --password-stdin <acct>.dkr.ecr.<region>.amazonaws.com
-docker build -f docker/Dockerfile.agent -t sitewatch-ai/agent-worker:1.0.0 .   # pinned prime-agent version inside
-docker tag sitewatch-ai/agent-worker:1.0.0 <acct>.dkr.ecr.<region>.amazonaws.com/sitewatch-ai/agent-worker:1.0.0
-docker push <acct>.dkr.ecr.<region>.amazonaws.com/sitewatch-ai/agent-worker:1.0.0
+docker build -f docker/Dockerfile.agent -t forgeguard-ai/agent-worker:1.0.0 .   # pinned prime-agent version inside
+docker tag forgeguard-ai/agent-worker:1.0.0 <acct>.dkr.ecr.<region>.amazonaws.com/forgeguard-ai/agent-worker:1.0.0
+docker push <acct>.dkr.ecr.<region>.amazonaws.com/forgeguard-ai/agent-worker:1.0.0
 # Set agent_image_uri in terraform.tfvars to the pushed URI above.
 ```
 
 ## 5. Secrets & Identity
 
 ```bash
-aws secretsmanager create-secret --name sitewatch-ai/llm/openrouter \
+aws secretsmanager create-secret --name forgeguard-ai/llm/openrouter \
   --secret-string '{"OPENAI_BASE_URL":"https://openrouter.ai/api/v1","OPENAI_API_KEY":"<key>"}'
 ```
 Grant the ECS **execution role** `secretsmanager:GetSecretValue` scoped to this ARN; keys land in
 container env at task start. The **task role** carries only the SQS policy above. Budget guardrails:
-AWS Budgets at $5/$15 with email+SMS; all resources tagged `project=sitewatch-ai`, `ttl=4h` for any
+AWS Budgets at $5/$15 with email+SMS; all resources tagged `project=forgeguard-ai`, `ttl=4h` for any
 non-persistent experiment; no NAT gateway (use interface VPC endpoints for SQS/EFS/ECR).
 
 ## 6. Smoke Test
@@ -89,7 +89,7 @@ AWS deployment would need, not an automated script this repo ships.
 ```bash
 # Queue name follows ${project_name}-incident-queue-${environment} (main.tf/sqs.tf);
 # "reference" is terraform.tfvars.example's default -- substitute your actual environment.
-QUEUE_URL=$(aws sqs get-queue-url --queue-name sitewatch-ai-incident-queue-reference --query QueueUrl --output text)
+QUEUE_URL=$(aws sqs get-queue-url --queue-name forgeguard-ai-incident-queue-reference --query QueueUrl --output text)
 
 # Inject one synthetic TriggerEvent (pipelines/schemas/models.py's shape) by hand:
 aws sqs send-message --queue-url "$QUEUE_URL" --message-body "$(uv run python -c '
@@ -103,7 +103,7 @@ print(TriggerEvent(
     calibration_quality=CalibrationQuality(rms_px=1.0, valid=True),
 ).model_dump_json())')"
 
-# EXPECT (CloudWatch Logs, /ecs/sitewatch-ai-worker-reference): RPC session starts, result.json
+# EXPECT (CloudWatch Logs, /ecs/forgeguard-ai-worker-reference): RPC session starts, result.json
 # validated, incident row appears in Aurora, DLQ depth stays 0, agent_runs row created with token
 # accounting -- same pass criteria scripts/smoke_test.py checks locally, verified by hand here.
 aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names ApproximateNumberOfMessages
@@ -116,7 +116,7 @@ aws sqs get-queue-attributes --queue-url "$QUEUE_URL" --attribute-names Approxim
 cd deploy/terraform/environments/aws
 # terraform destroy -target=aws_ecs_service.agent_service   # stop compute first
 # terraform destroy                                         # then storage/queues/network
-aws budgets delete-budget --account-id <acct> --budget-name sitewatch-ai-5usd   # after confirming clean
+aws budgets delete-budget --account-id <acct> --budget-name forgeguard-ai-5usd   # after confirming clean
 ```
 Standing rules: scale `desired_count=0` when idle; CloudWatch log retention 30 days; EFS IA
 lifecycle on; alert if `ApproximateAgeOfOldestMessage` exceeds 1 h (agent stuck).

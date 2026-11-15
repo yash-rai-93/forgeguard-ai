@@ -1,6 +1,6 @@
-# SiteWatch AI — GCP Deployment Guide (Deployable Reference Architecture)
+# ForgeGuard AI — GCP Deployment Guide (Deployable Reference Architecture)
 
-> **Scope statement.** SiteWatch AI is a portfolio project; this is deployable reference
+> **Scope statement.** ForgeGuard AI is a portfolio project; this is deployable reference
 > architecture documentation for Google Cloud. No live deployment is performed. All
 > `terraform apply` commands are intentionally commented out.
 
@@ -13,7 +13,7 @@ delivery plane (FastAPI + React), and persistence.
 | Component | Architecture Role | Cloud Primitive | Operational Role |
 |---|---|---|---|
 | Anomaly event bus | FAST PATH trigger events consumed by SLOW PATH | Pub/Sub topic + push subscription | Edge publisher emits JSON trigger events; Cloud Run worker receives pushes |
-| Failed-event isolation | DLQ for poison / undecodable anomaly events | Pub/Sub dead-letter topic + retry policy | Events failing N delivery attempts route to `sitewatch-ai-anomaly-dlq` |
+| Failed-event isolation | DLQ for poison / undecodable anomaly events | Pub/Sub dead-letter topic + retry policy | Events failing N delivery attempts route to `forgeguard-ai-anomaly-dlq` |
 | Reasoning worker | SLOW PATH: kinematic verification, OSHA compliance correlation, shift reports | Cloud Run (v2) service | Dockerized Prime Agent supervisor + headless IPython REPL, RLM sub-agents |
 | Agent harness state | Persistent memory / prompt notes / skills for the agent runtime | Filestore (NFS) instance | NFS volume mounted read-write at `/home/node/.prime` in the worker container |
 | Incident clips | Video evidence retained per incident | Cloud Storage (standard, regional) | Edge uploader puts MP4 clips; FastAPI backend serves signed URLs |
@@ -29,7 +29,7 @@ gcloud --version && terraform --version && docker --version
 
 # Authenticate and set project context
 gcloud auth login
-gcloud config set project sitewatch-ai-prod
+gcloud config set project forgeguard-ai-prod
 gcloud auth application-default login
 
 # Enable required APIs
@@ -46,8 +46,8 @@ Terraform root: `deploy/terraform/environments/gcp`; CI runs `terraform fmt -che
 # deploy/terraform/environments/gcp/main.tf
 locals {
   region     = "us-central1"
-  project_id = "sitewatch-ai-prod"
-  labels = { project = "sitewatch-ai", managed-by = "terraform",
+  project_id = "forgeguard-ai-prod"
+  labels = { project = "forgeguard-ai", managed-by = "terraform",
              ttl = "30d", environment = "reference" }  # ttl = auto-expiry tag
 }
 
@@ -55,29 +55,29 @@ locals {
 # resource this guide referenced without defining until `terraform validate`
 # caught the dangling reference.
 resource "google_service_account" "run_invoker" {
-  account_id   = "sitewatch-ai-run-invoker"
-  display_name = "SiteWatch AI Pub/Sub -> Cloud Run push invoker"
+  account_id   = "forgeguard-ai-run-invoker"
+  display_name = "ForgeGuard AI Pub/Sub -> Cloud Run push invoker"
   project      = local.project_id
 }
 
 # --- Pub/Sub: anomaly events + dead-letter topic -----------------------------
 resource "google_pubsub_topic" "anomaly_dlq" {
-  name    = "sitewatch-ai-anomaly-dlq"
+  name    = "forgeguard-ai-anomaly-dlq"
   project = local.project_id
 }
 
 resource "google_pubsub_topic" "anomaly_events" {
-  name    = "sitewatch-ai-anomaly-events"
+  name    = "forgeguard-ai-anomaly-events"
   project = local.project_id
 }
 
 resource "google_pubsub_subscription" "anomaly_push" {
-  name    = "sitewatch-ai-anomaly-push"
+  name    = "forgeguard-ai-anomaly-push"
   topic   = google_pubsub_topic.anomaly_events.id
   project = local.project_id
 
   push_config {
-    push_endpoint = "https://sitewatch-ai-worker-abc123-uc.a.run.app/pubsub/push"
+    push_endpoint = "https://forgeguard-ai-worker-abc123-uc.a.run.app/pubsub/push"
     oidc_token { service_account_email = google_service_account.run_invoker.email }
   }
 
@@ -93,7 +93,7 @@ resource "google_pubsub_subscription" "anomaly_push" {
 
 # --- Filestore: persistent agent harness state (/home/node/.prime) ----------------
 resource "google_filestore_instance" "prime_state" {
-  name     = "sitewatch-ai-prime-state"
+  name     = "forgeguard-ai-prime-state"
   project  = local.project_id
   location = local.region
   tier     = "BASIC_HDD"   # smallest tier; BASIC_SSD if latency matters
@@ -109,7 +109,7 @@ resource "google_filestore_instance" "prime_state" {
 
 # --- Cloud Storage: incident clips -------------------------------------------
 resource "google_storage_bucket" "incident_clips" {
-  name                        = "sitewatch-ai-incident-clips"
+  name                        = "forgeguard-ai-incident-clips"
   location                    = local.region
   uniform_bucket_level_access = true
   labels                      = local.labels
@@ -121,7 +121,7 @@ resource "google_storage_bucket" "incident_clips" {
 
 # --- Cloud SQL: PostgreSQL (serverless-style) --------------------------------
 resource "google_sql_database_instance" "postgres" {
-  name             = "sitewatch-ai-pg"
+  name             = "forgeguard-ai-pg"
   database_version = "POSTGRES_15"
   region           = local.region
   settings {
@@ -156,13 +156,13 @@ terraform plan -out=tfplan
 
 ```bash
 # Artifact Registry repository
-gcloud artifacts repositories create sitewatch-ai \
+gcloud artifacts repositories create forgeguard-ai \
   --repository-format=docker --location=us-central1 \
-  --description="SiteWatch AI slow-path worker images"
+  --description="ForgeGuard AI slow-path worker images"
 
 AR_HOST=us-central1-docker.pkg.dev
 gcloud auth configure-docker ${AR_HOST}
-W=${AR_HOST}/sitewatch-ai-prod/sitewatch-ai
+W=${AR_HOST}/forgeguard-ai-prod/forgeguard-ai
 # Both Dockerfiles build from the repo root (docker/docker-compose.yml's own
 # `context: ..`), not a services/ subdirectory -- this guide previously
 # referenced ./services/reasoning-worker and ./services/backend, neither of
@@ -177,30 +177,30 @@ docker push  ${W}/backend:0.1.0
 
 ```bash
 # LLM provider API key (injected at runtime, never baked into images)
-gcloud secrets create sitewatch-ai-llm-api-key --replication-policy=automatic
-echo -n "sk-REDACTED" | gcloud secrets versions add sitewatch-ai-llm-api-key --data-file=-
+gcloud secrets create forgeguard-ai-llm-api-key --replication-policy=automatic
+echo -n "sk-REDACTED" | gcloud secrets versions add forgeguard-ai-llm-api-key --data-file=-
 ```
 
 Least-privilege service accounts:
 
 ```bash
 # 1. Worker runtime: Pub/Sub consumer + storage writer only
-gcloud iam service-accounts create sitewatch-ai-worker --display-name="SiteWatch AI slow-path worker"
-gcloud pubsub topics add-iam-policy-binding sitewatch-ai-anomaly-events \
-  --member="serviceAccount:sitewatch-ai-worker@sitewatch-ai-prod.iam.gserviceaccount.com" \
+gcloud iam service-accounts create forgeguard-ai-worker --display-name="ForgeGuard AI slow-path worker"
+gcloud pubsub topics add-iam-policy-binding forgeguard-ai-anomaly-events \
+  --member="serviceAccount:forgeguard-ai-worker@forgeguard-ai-prod.iam.gserviceaccount.com" \
   --role="roles/pubsub.publisher"
-gcloud storage buckets add-iam-policy-binding gs://sitewatch-ai-incident-clips \
-  --member="serviceAccount:sitewatch-ai-worker@sitewatch-ai-prod.iam.gserviceaccount.com" \
+gcloud storage buckets add-iam-policy-binding gs://forgeguard-ai-incident-clips \
+  --member="serviceAccount:forgeguard-ai-worker@forgeguard-ai-prod.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 # 2. Push invoker: may ONLY invoke the Cloud Run service
-gcloud run services add-iam-policy-binding sitewatch-ai-worker \
-  --member="serviceAccount:sitewatch-ai-run-invoker@sitewatch-ai-prod.iam.gserviceaccount.com" \
+gcloud run services add-iam-policy-binding forgeguard-ai-worker \
+  --member="serviceAccount:forgeguard-ai-run-invoker@forgeguard-ai-prod.iam.gserviceaccount.com" \
   --role="roles/run.invoker"
 
 # 3. Backend: Cloud SQL client only
 gcloud iam service-accounts add-iam-policy-binding \
-  sitewatch-ai-backend@sitewatch-ai-prod.iam.gserviceaccount.com \
-  --role="roles/cloudsql.client" --project=sitewatch-ai-prod
+  forgeguard-ai-backend@forgeguard-ai-prod.iam.gserviceaccount.com \
+  --role="roles/cloudsql.client" --project=forgeguard-ai-prod
 
 # 4. Filestore access is network-layer enforced; grant roles/file.editor to the provisioning SA only.
 ```
@@ -211,7 +211,7 @@ Inject a synthetic anomaly event and verify the full SLOW PATH response.
 
 ```bash
 # 1. Publish a synthetic geofence-intrusion trigger (matches FAST PATH schema)
-gcloud pubsub topics publish sitewatch-ai-anomaly-events --message='{
+gcloud pubsub topics publish forgeguard-ai-anomaly-events --message='{
   "event_id": "smoke-001", "event_type": "geofence_intrusion",
   "camera_id": "cam-east-gate", "tracklet_id": "tk-4471",
   "ground_coords_m": {"x": 12.4, "y": 8.1}, "velocity_ms": 1.6,
@@ -219,12 +219,12 @@ gcloud pubsub topics publish sitewatch-ai-anomaly-events --message='{
 }'
 
 # 2. Confirm the push subscription delivered it (no DLQ accumulation)
-gcloud pubsub subscriptions describe sitewatch-ai-anomaly-push \
+gcloud pubsub subscriptions describe forgeguard-ai-anomaly-push \
   --format="value(numUndeliveredMessages)"
 
 # 3. Check the worker logs for the expected agent pipeline stages
 gcloud logging read \
-  'resource.type="cloud_run_revision" AND resource.labels.service_name="sitewatch-ai-worker"' \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="forgeguard-ai-worker"' \
   --limit=20 --format="value(textPayload)"
 ```
 
@@ -235,7 +235,7 @@ Expected agent incident response, in order:
    ground-plane path consistent with the trigger).
 3. OSHA-style compliance correlation: maps `forklift_lane_b` intrusion to powered-industrial-truck
    clearance rules; severity assigned.
-4. Incident record inserted into Cloud SQL; clip reference resolved from `gs://sitewatch-ai-incident-clips`.
+4. Incident record inserted into Cloud SQL; clip reference resolved from `gs://forgeguard-ai-incident-clips`.
 5. Shift-report synthesis updated; harness memory note written to `/home/node/.prime`.
 6. Smoke event visible on the dashboard at `/incidents/smoke-001`.
 
@@ -246,13 +246,13 @@ all six stages present in logs within 120 seconds.
 
 ```bash
 # Budget alerts at $5 and $15 (do this BEFORE any apply)
-BA=$(gcloud billing projects describe sitewatch-ai-prod \
+BA=$(gcloud billing projects describe forgeguard-ai-prod \
     --format="value(billingAccountName)" | cut -d/ -f2)
 gcloud billing budgets create --billing-account=${BA} \
-  --display-name="sitewatch-ai-5usd" --budget-amount=5USD \
+  --display-name="forgeguard-ai-5usd" --budget-amount=5USD \
   --threshold-rule=percent=0.5 --threshold-rule=percent=0.9
 gcloud billing budgets create --billing-account=${BA} \
-  --display-name="sitewatch-ai-15usd" --budget-amount=15USD
+  --display-name="forgeguard-ai-15usd" --budget-amount=15USD
 
 # Destructive teardown — reference environments only
 # terraform destroy -target=google_filestore_instance.prime_state   # ~$180/mo — first
@@ -260,8 +260,8 @@ gcloud billing budgets create --billing-account=${BA} \
 # terraform destroy                                                  # remainder
 
 # Manual fallbacks if Terraform state is unavailable
-# gcloud sql instances delete sitewatch-ai-pg
-# gcloud filestore instances delete sitewatch-ai-prime-state --zone=us-central1-b
+# gcloud sql instances delete forgeguard-ai-pg
+# gcloud filestore instances delete forgeguard-ai-prime-state --zone=us-central1-b
 ```
 
 Cost-safety rules:

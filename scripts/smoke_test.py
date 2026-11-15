@@ -151,7 +151,7 @@ async def _wait_for_incident_created(ws: object, event_id: str, timeout_s: float
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--redis-url", default="redis://localhost:6379")
-    ap.add_argument("--postgres-dsn", default="postgresql://sitewatch:sitewatch@localhost:5432/sitewatch")
+    ap.add_argument("--postgres-dsn", default="postgresql://forgeguard:forgeguard@localhost:5432/forgeguard")
     ap.add_argument("--ws-url", default="ws://localhost:8000/live/ws")
     ap.add_argument("--real-agent", action="store_true", help="drive the real prime-agent CLI")
     args = ap.parse_args()

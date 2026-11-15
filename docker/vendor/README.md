@@ -21,7 +21,7 @@ for the full context, and risk F9 in `docs/prime-agent-feasibility.md`.
 From a machine with a working `prime-agent` install (`npm list -g prime-agent`):
 
 ```bash
-npm pack --pack-destination /path/to/sitework-ai/docker/vendor \
+npm pack --pack-destination /path/to/forgeguard-ai/docker/vendor \
   "$(npm root -g)/prime-agent"
 ```
 

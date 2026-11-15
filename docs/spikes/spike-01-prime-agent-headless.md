@@ -76,7 +76,7 @@ wrapper-level timeout (the spike driver's own deadline + `abort` command) actual
 may be a version-specific behavior, an interaction with not setting `--autonomous-gate` (untested —
 gates may be what's meant to define "done," with max-turns as a secondary ceiling that doesn't bite
 cleanly without one), or something else — this spike didn't have budget to fully reverse-engineer a
-third party's internals. What matters for SiteWatch: **do not ship `agent/worker.py` assuming
+third party's internals. What matters for ForgeGuard: **do not ship `agent/worker.py` assuming
 prime-agent's own flags are sufficient.** `worker.py` must wrap every invocation in its own
 subprocess-level wall-clock timeout and kill it if exceeded, regardless of what CLI flags are
 passed — defense in depth, not a single point of trust. This changes F7's mitigation in the

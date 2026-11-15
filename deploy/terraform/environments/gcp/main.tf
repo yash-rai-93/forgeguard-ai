@@ -8,7 +8,7 @@
 locals {
   region = "us-central1"
   labels = {
-    project     = "sitewatch-ai"
+    project     = "forgeguard-ai"
     managed-by  = "terraform"
     ttl         = "30d" # auto-expiry tag for cost safety
     environment = var.environment
@@ -19,24 +19,24 @@ locals {
 # invoking the Cloud Run worker -- referenced by the guide's push_config but
 # not previously defined; real gap closed here rather than left dangling.
 resource "google_service_account" "run_invoker" {
-  account_id   = "sitewatch-ai-run-invoker"
-  display_name = "SiteWatch AI Pub/Sub -> Cloud Run push invoker"
+  account_id   = "forgeguard-ai-run-invoker"
+  display_name = "ForgeGuard AI Pub/Sub -> Cloud Run push invoker"
   project      = var.project_id
 }
 
 # --- Pub/Sub: anomaly events + dead-letter topic -----------------------------
 resource "google_pubsub_topic" "anomaly_dlq" {
-  name    = "sitewatch-ai-anomaly-dlq"
+  name    = "forgeguard-ai-anomaly-dlq"
   project = var.project_id
 }
 
 resource "google_pubsub_topic" "anomaly_events" {
-  name    = "sitewatch-ai-anomaly-events"
+  name    = "forgeguard-ai-anomaly-events"
   project = var.project_id
 }
 
 resource "google_pubsub_subscription" "anomaly_push" {
-  name    = "sitewatch-ai-anomaly-push"
+  name    = "forgeguard-ai-anomaly-push"
   topic   = google_pubsub_topic.anomaly_events.id
   project = var.project_id
 
@@ -68,7 +68,7 @@ resource "google_pubsub_subscription" "anomaly_push" {
 # silently swapped for a cheaper alternative; the cost-model doc is where that
 # tradeoff is discussed, not this file.
 resource "google_filestore_instance" "prime_state" {
-  name     = "sitewatch-ai-prime-state"
+  name     = "forgeguard-ai-prime-state"
   project  = var.project_id
   location = local.region
   tier     = "BASIC_HDD"
@@ -86,7 +86,7 @@ resource "google_filestore_instance" "prime_state" {
 
 # --- Cloud Storage: incident clips -------------------------------------------
 resource "google_storage_bucket" "incident_clips" {
-  name                        = "sitewatch-ai-incident-clips"
+  name                        = "forgeguard-ai-incident-clips"
   location                    = local.region
   uniform_bucket_level_access = true
   labels                      = local.labels
@@ -103,7 +103,7 @@ resource "google_storage_bucket" "incident_clips" {
 
 # --- Cloud SQL: PostgreSQL (serverless-style) --------------------------------
 resource "google_sql_database_instance" "postgres" {
-  name             = "sitewatch-ai-pg"
+  name             = "forgeguard-ai-pg"
   database_version = "POSTGRES_15"
   region           = local.region
   project          = var.project_id
